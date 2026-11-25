@@ -5,8 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { WagmiProvider } from "wagmi";
 import { wagmiConfig } from "@/lib/chain/config";
 import { ToastProvider } from "@/components/ui";
-import { loadPersisted, setState, tickDuels } from "@/lib/store/store";
-import { getBrowserSupabase } from "@/lib/supabase/client";
+import { loadPersisted, tickDuels } from "@/lib/store/store";
 
 function Boot() {
   useEffect(() => {
@@ -19,15 +18,9 @@ function Boot() {
       navigator.serviceWorker.register("/sw.js").catch(() => {});
     }
 
-    // supabase auth bridge: real auth when credentials are configured
-    const sb = getBrowserSupabase();
-    const sub = sb?.auth.onAuthStateChange((_e, session) => {
-      setState((s) => ({
-        ...s,
-        session: { ...s.session, mode: "supabase", email: session?.user.email ?? undefined, userId: session ? s.session.userId ?? "u_me" : null },
-      }));
-    });
-    return () => { clearInterval(id); sub?.data.subscription.unsubscribe(); };
+    // in supabase mode loadPersisted() connects to the database and listens for auth
+    // and realtime changes (see lib/store/store.ts)
+    return () => { clearInterval(id); };
   }, []);
   return null;
 }

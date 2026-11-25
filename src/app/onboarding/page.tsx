@@ -45,7 +45,7 @@ export default function OnboardingPage() {
     }
     if (step === 1 || step === 2) await run(() => updateProfile({ avatar: draft.avatar, avatarColor: draft.avatarColor, bio: draft.bio, favoriteStocks: draft.favoriteStocks }));
     if (step === STEPS.length - 1) {
-      completeOnboarding();
+      completeOnboarding(country);
       router.push("/");
       return;
     }

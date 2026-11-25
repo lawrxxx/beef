@@ -48,7 +48,8 @@ copy `.env.example` → `.env.local`.
 | variable | required | notes |
 |---|---|---|
 | `NEXT_PUBLIC_APP_URL` | prod | canonical url, used for share links and metadata |
-| `NEXT_PUBLIC_SUPABASE_URL` | for backend | blank = demo mode |
+| `NEXT_PUBLIC_BACKEND` | for live mode | set to `supabase` to switch from demo mode to the database |
+| `NEXT_PUBLIC_SUPABASE_URL` | for live mode | |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | for backend | public anon key (rls applies) |
 | `SUPABASE_SERVICE_ROLE_KEY` | for backend | **server only**. used by the settlement service and cron. never prefix with `NEXT_PUBLIC_` |
 | `MARKET_DATA_PROVIDER` | no | `mock` (default) · `polygon` · `finnhub` · `alphavantage` |
@@ -58,18 +59,29 @@ copy `.env.example` → `.env.local`.
 | `NEXT_PUBLIC_ESCROW_ADDRESS` | no | reference escrow, not deployed |
 | `NEXT_PUBLIC_REAL_MONEY_ENABLED` | no | keep `false`. even `true` does nothing without a deployed escrow, and the db schema rejects non-simulated duels |
 
-## supabase setup
+## supabase setup (live mode)
 
-1. create a project at supabase.com and copy the url, anon key and service role key into `.env.local`.
-2. apply the schema and seed:
-   ```bash
-   npx supabase link --project-ref <ref>
-   npx supabase db push                 # applies supabase/migrations/*
-   psql "$DATABASE_URL" -f supabase/seed.sql   # optional demo data
-   ```
-   or paste both files into the sql editor in order.
-3. auth → url configuration: add `<your-url>/onboarding` and `<your-url>/auth/update-password` to the redirect allow list.
-4. the migration creates the public `avatars` storage bucket and adds tables to the `supabase_realtime` publication.
+the app stays in demo mode until you set `NEXT_PUBLIC_BACKEND=supabase`. adding supabase keys alone never switches modes, so the public demo can't break by accident.
+
+**with vercel (easiest)**
+1. vercel → your project → **storage** → create database → **supabase**, connected to the project. vercel adds `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` and `SUPABASE_SERVICE_ROLE_KEY`.
+2. supabase dashboard → **sql editor**: run `supabase/migrations/20261125000000_beef_schema.sql`, then `supabase/migrations/20261126000000_social_triggers.sql`, then optionally `supabase/seed.sql` (regenerate it first with `npm run db:seed-sql` so its dates are current).
+3. supabase → **authentication → url configuration**: set the site url to your app url and add `<url>/onboarding` and `<url>/auth/update-password` as redirect urls. while testing you can turn off *confirm email* under authentication → sign in providers → email.
+4. vercel → settings → environment variables: add `NEXT_PUBLIC_BACKEND=supabase` (and `CRON_SECRET`), then redeploy.
+
+**locally**
+```bash
+npx supabase start          # needs docker; applies migrations + seed from ./supabase
+# copy API_URL / ANON_KEY / SERVICE_ROLE_KEY from `npx supabase status` into .env.local
+NEXT_PUBLIC_BACKEND=supabase npm run build && npm start
+npm run e2e:supabase        # two real accounts: invite, accept, settle, notify, realtime
+```
+
+**how live mode works**
+- the client store loads from postgres (rls decides what each person can see), writes every action straight to the database, and reloads when realtime reports a change in any shared table.
+- accepting, declining and cancelling go through the `accept_duel` / `decline_duel` / `cancel_duel` rpcs. invites, acceptances, declines, follows, comments and reactions create notifications through database triggers, so people get them on any device.
+- lock and settle requests send only the duel id. the server loads the terms from the database, checks that the caller is a participant, fetches prices itself and writes snapshots, the settlement and the audit log with the service role. the vercel cron settles everything else.
+- seeded demo people exist only as profiles (they can't sign in), so challenges sent to them stay pending. real users can challenge each other.
 
 **what's in the schema** (`supabase/migrations/20261125000000_beef_schema.sql`): profiles, stock_assets, duels, duel_participants, duel_comments, duel_reactions, posts, post_comments, post_reactions, predictions, follows, rivalries, achievements, user_achievements, communities, community_members, notifications, daily_beefs, daily_picks, duel_price_snapshots, duel_settlements, settlement_audit_logs. foreign keys, indexes and rls on every table, plus:
 
@@ -85,10 +97,12 @@ the schema, seed, rls policies, triggers and rpcs were verified against postgres
 
 | area | status |
 |---|---|
-| auth (email sign up/in/out, reset, update password), avatar upload | ✅ supabase when configured, local in demo mode |
+| auth (email sign up/in/out, reset, update password), avatar upload | ✅ supabase in live mode, local in demo mode |
 | lock / settle / cron | ✅ server-side; postgres-backed idempotency + audit when configured, in-memory in demo mode |
-| social data (posts, duels, follows…) | ⚠️ the schema, rls and rpcs are ready and tested, but the ui still reads and writes the local demo store. adding supabase keys alone does **not** make social data shared. that wiring is the next step |
-| demo settlement requests | the browser sends duel terms to `/api/duels/settle` in demo mode (prices are always fetched by the server). in supabase mode the server loads terms from the database instead |
+| social data (posts, duels, follows, comments, reactions, communities, notifications, picks) | ✅ stored in postgres in live mode, with realtime updates. tested end to end with two accounts against a local supabase stack |
+| demo settlement requests | in demo mode the browser sends duel terms to `/api/duels/settle` (prices are always fetched by the server). live mode sends only the duel id |
+| live-mode data loading | the client loads the latest few hundred rows of each table and reloads on any change. fine for a demo or hackathon, but it would need pagination for real traffic |
+| demo time controls in live mode | duel participants can still "jump" to the lock / deadline because prices are simulated. remove them before using real market data |
 | market data | only the simulated provider has been exercised. the polygon / finnhub / alpha vantage adapters are written but untested without api keys |
 | `supabase/seed.sql` | generated from the time-relative seed, so its dates are fixed at generation time. rerun `npm run db:seed-sql` before seeding |
 | rate limiting | in-memory per server instance |

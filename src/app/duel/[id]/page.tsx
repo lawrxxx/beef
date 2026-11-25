@@ -9,7 +9,7 @@ import {
 } from "lucide-react";
 import type { Duel } from "@/lib/types";
 import {
-  acceptDuel, cancelDuel, declineDuel, encodeInvite, requestLock, requestSettlement, simulateOpponentAccept, useBeef,
+  REMOTE, acceptDuel, cancelDuel, declineDuel, inviteLink, requestLock, requestSettlement, simulateOpponentAccept, useBeef,
 } from "@/lib/store/store";
 import { livePerformance, useMe, useMounted, useNow, useQuotes, userById } from "@/lib/hooks";
 import { canAccept, isParticipant, STATUS_LABEL } from "@/lib/derive";
@@ -153,7 +153,7 @@ function DuelView({ d }: { d: Duel }) {
             <p className="flex items-center gap-2 font-semibold"><Clock size={17} /> waiting for {d.open ? "someone to accept" : d.participants.filter((p) => !p.accepted).map((p) => `@${usersMap[p.userId]?.username}`).join(", ")}</p>
             <p className="mt-1 text-sm text-muted">invitation expires {marketTime(d.inviteExpiresAt)}.</p>
             <div className="mt-3 grid grid-cols-2 gap-2">
-              <button className="btn-dark btn-sm" onClick={() => shareLink(`/invite#${encodeInvite(d)}`, `${me?.displayName} challenged you on beef: ${d.participants.map((p) => p.ticker).join(" vs ")}, ${usd(d.stake, 0)} each.`)}><Share2 size={15} /> share invite</button>
+              <button className="btn-dark btn-sm" onClick={() => shareLink(inviteLink(d), `${me?.displayName} challenged you on beef: ${d.participants.map((p) => p.ticker).join(" vs ")}, ${usd(d.stake, 0)} each.`)}><Share2 size={15} /> share invite</button>
               {d.createdBy === me?.id && <button className="btn-outline btn-sm" onClick={() => run(() => cancelDuel(d.id), "duel cancelled")}>cancel</button>}
             </div>
           </div>
@@ -227,12 +227,12 @@ function DuelView({ d }: { d: Duel }) {
       )}
 
       {/* demo time controls */}
-      {(d.status === "accepted" || live || (d.status === "pending" && mine && !acceptable)) && (
+      {(d.status === "accepted" || live || (d.status === "pending" && mine && !acceptable && !REMOTE)) && (mine || !REMOTE) && (
         <div className="card mt-4 border-dashed p-4">
           <p className="flex items-center gap-2 text-sm font-semibold"><FastForward size={16} /> demo time controls <SimBadge label="demo only" /></p>
           <p className="mt-1 text-[13px] text-muted">real duels wait for real market closes. in the demo you can jump ahead: the server computes the outcome from simulated closing prices. you can't pick the prices, only skip the wait.</p>
           <div className="mt-3 flex flex-wrap gap-2">
-            {d.status === "pending" && <button className="btn-outline btn-sm" onClick={() => run(() => simulateOpponentAccept(d.id), "accepted")}>simulate acceptance</button>}
+            {d.status === "pending" && !REMOTE && <button className="btn-outline btn-sm" onClick={() => run(() => simulateOpponentAccept(d.id), "accepted")}>simulate acceptance</button>}
             {d.status === "accepted" && d.lockAt && <button className="btn-outline btn-sm" disabled={busy} onClick={() => busyRun(() => requestLock(d.id, d.lockAt), "starting prices locked")}>jump to price lock</button>}
             {live && <button className="btn-outline btn-sm" disabled={busy} onClick={() => busyRun(() => requestSettlement(d.id, new Date(new Date(d.deadline).getTime() + 60_000).toISOString()), "settled by the server")}>jump to deadline & settle</button>}
           </div>

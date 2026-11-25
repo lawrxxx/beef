@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { LogOut, Pencil, RotateCcw, Settings, Share2, Swords, Download } from "lucide-react";
 import type { User } from "@/lib/types";
-import { resetDemo, signOut, useBeef } from "@/lib/store/store";
+import { REMOTE, resetDemo, signOut, useBeef } from "@/lib/store/store";
 import { achievementsFor, correctPicks, rivalsOf, statsFor, useMounted } from "@/lib/hooks";
 import { cx } from "@/lib/format";
 import { Avatar, CardSkeleton, Section, SimBadge, Tabs, TickerTag, useAction, Sheet } from "@/components/ui";
@@ -135,7 +135,7 @@ export function ProfileView({ user }: { user: User }) {
           )}
           <Link href="/wallet" className="btn-outline w-full justify-start">wallet & practice balance</Link>
           <Link href="/rules" className="btn-outline w-full justify-start">how beef works & risk disclosure</Link>
-          <button className="btn-outline w-full justify-start" onClick={() => { if (confirm("reset all demo data on this device?")) { resetDemo(); setSettings(false); router.push("/"); } }}><RotateCcw size={17} /> reset demo data</button>
+          {!REMOTE && <button className="btn-outline w-full justify-start" onClick={() => { if (confirm("reset all demo data on this device?")) { resetDemo(); setSettings(false); router.push("/"); } }}><RotateCcw size={17} /> reset demo data</button>}
           <button className="btn-outline w-full justify-start text-loss" onClick={() => run(() => { signOut(); setSettings(false); router.push("/"); }, "signed out")}><LogOut size={17} /> sign out</button>
           <div className="pt-2"><SimBadge label="simulated prices · practice money" /></div>
         </div>

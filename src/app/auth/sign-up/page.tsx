@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { MailCheck } from "lucide-react";
-import { signUpDemo } from "@/lib/store/store";
+import { reloadRemote, signUpDemo } from "@/lib/store/store";
 import { getBrowserSupabase } from "@/lib/supabase/client";
 import { AuthFrame } from "@/components/auth-ui";
 import { useAction } from "@/components/ui";
@@ -30,6 +30,8 @@ export default function SignUpPage() {
         const { data, error } = await sb.auth.signUp({ email, password, options: { emailRedirectTo: `${window.location.origin}/onboarding` } });
         if (error) throw new Error(error.message.toLowerCase());
         if (!data.session) { setSent(true); return false; }
+        await reloadRemote();
+        return true;
       }
       signUpDemo(email);
       return true;

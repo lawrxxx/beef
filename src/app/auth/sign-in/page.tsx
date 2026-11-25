@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { signInDemo } from "@/lib/store/store";
+import { reloadRemote, signInDemo } from "@/lib/store/store";
 import { getBrowserSupabase } from "@/lib/supabase/client";
 import { AuthFrame } from "@/components/auth-ui";
 import { useAction } from "@/components/ui";
@@ -25,6 +25,8 @@ export default function SignInPage() {
       if (sb) {
         const { error } = await sb.auth.signInWithPassword({ email, password });
         if (error) throw new Error(error.message.toLowerCase());
+        await reloadRemote();
+        return true;
       }
       signInDemo(email);
       return true;

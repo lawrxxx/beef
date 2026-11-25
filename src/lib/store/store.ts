@@ -12,6 +12,12 @@ import {
 import { uid } from "@/lib/format";
 import { getAsset } from "@/lib/market/assets";
 import { nextCloseAfter, sessionCloseUtc } from "@/lib/market/calendar";
+import { isSupabaseConfigured } from "@/lib/supabase/config";
+import { getBrowserSupabase } from "@/lib/supabase/client";
+import { loadSnapshot, remote, subscribe } from "@/lib/backend/supabase";
+
+/** supabase mode: data lives in postgres. demo mode: seeded data in localStorage. */
+export const REMOTE = isSupabaseConfigured();
 
 export interface SessionState {
   userId: string | null;
@@ -52,7 +58,15 @@ function seedState(): BeefState {
   };
 }
 
-let state: BeefState = seedState();
+function emptyState(): BeefState {
+  return {
+    version: VERSION, users: [], duels: [], posts: [], comments: [], reactions: [], follows: [], communities: [],
+    memberships: [], notifications: [], daily: [], transactions: [], audit: {},
+    session: { userId: null, onboarded: false, ageConfirmed: false, mode: "supabase" },
+  };
+}
+
+let state: BeefState = REMOTE ? emptyState() : seedState();
 const serverState = state;
 let loaded = false;
 const listeners = new Set<() => void>();
@@ -62,6 +76,7 @@ function emit() {
 }
 
 function persist() {
+  if (REMOTE) return; // postgres is the source of truth
   try {
     localStorage.setItem(KEY, JSON.stringify(state));
   } catch {
@@ -71,6 +86,7 @@ function persist() {
 
 export function loadPersisted() {
   if (loaded || typeof window === "undefined") return;
+  if (REMOTE) { void startRemote(); return; }
   loaded = true;
   try {
     const raw = localStorage.getItem(KEY);
@@ -85,6 +101,67 @@ export function loadPersisted() {
   }
   emit();
 }
+
+// ---------- supabase mode ----------
+
+let remoteStarted = false;
+let reloading: Promise<void> | null = null;
+
+/** replaces local state with what the database says (rls decides what we can see) */
+export function reloadRemote(): Promise<void> {
+  const sb = getBrowserSupabase();
+  if (!sb) return Promise.resolve();
+  if (reloading) return reloading;
+  reloading = (async () => {
+    try {
+      const snap = await loadSnapshot(sb);
+      const prevDismissed = state.installDismissedAt;
+      state = {
+        ...emptyState(), ...snap, installDismissedAt: prevDismissed,
+        transactions: snap.me ? [{ id: "sim_faucet", userId: snap.me.id, kind: "faucet", amount: 100, createdAt: snap.users.find((u) => u.id === snap.me!.id)?.joinedAt ?? now(), state: "simulated" }] : [],
+        session: { userId: snap.me?.id ?? null, email: snap.me?.email, onboarded: snap.me?.onboarded ?? false, ageConfirmed: snap.me?.adult ?? false, mode: "supabase" },
+      };
+    } catch (e) {
+      remoteError(e);
+    } finally {
+      loaded = true;
+      reloading = null;
+      emit();
+    }
+  })();
+  return reloading;
+}
+
+async function startRemote() {
+  if (remoteStarted) return;
+  remoteStarted = true;
+  const sb = getBrowserSupabase()!;
+  sb.auth.onAuthStateChange((event) => { if (event !== "INITIAL_SESSION" && event !== "TOKEN_REFRESHED") void reloadRemote(); });
+  subscribe(sb, () => void reloadRemote());
+  await reloadRemote();
+}
+
+function remoteError(e: unknown) {
+  if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent("beef:toast", { detail: { kind: "error", text: e instanceof Error ? e.message : "couldn't save that" } }));
+}
+
+/** runs a database write after an optimistic local update. on failure: toast + resync. */
+function sync(fn: (sb: NonNullable<ReturnType<typeof getBrowserSupabase>>) => Promise<unknown>) {
+  if (!REMOTE) return;
+  const sb = getBrowserSupabase();
+  if (!sb) return;
+  fn(sb).catch((e) => { remoteError(e); void reloadRemote(); });
+}
+
+/** awaited variant for actions whose result the ui waits on */
+async function syncNow(fn: (sb: NonNullable<ReturnType<typeof getBrowserSupabase>>) => Promise<unknown>) {
+  const sb = getBrowserSupabase();
+  if (!sb) return;
+  try { await fn(sb); } catch (e) { void reloadRemote(); throw new ActionError(e instanceof Error ? e.message : "couldn't save that"); }
+}
+
+/** ids: uuids in supabase mode (database primary keys), short ids in demo mode */
+const newId = (prefix: string) => (REMOTE ? crypto.randomUUID() : uid(prefix));
 
 /** true once saved data (if any) has been loaded. pages render after this, so the
  *  seed never flashes before a returning user's data, and nothing time-dependent is
@@ -119,6 +196,7 @@ export function useBeef(): BeefState {
 }
 
 export function resetDemo() {
+  if (REMOTE) return;
   state = seedState();
   persist();
   emit();
@@ -130,8 +208,8 @@ const now = () => new Date().toISOString();
 const me = () => state.session.userId;
 
 function notify(n: Omit<Notification, "id" | "createdAt" | "read" | "userId">, userId = ME) {
-  // only the signed-in demo account has an inbox in demo mode
-  if (userId !== ME) return [] as Notification[];
+  // demo mode only: in supabase mode the database creates notifications (triggers)
+  if (REMOTE || userId !== ME) return [] as Notification[];
   return [{ ...n, id: uid("n"), userId, createdAt: now(), read: false }];
 }
 
@@ -161,8 +239,9 @@ export function createPost(input: { body: string; kind: Post["kind"]; prediction
   if (!body || body.length > 500) throw new ActionError("posts need 1–500 characters");
   throttle("post", 5, 60_000);
   const tickers = input.prediction ? [input.prediction.pick, input.prediction.versus] : Array.from(new Set((body.match(/\$?\b[A-Z]{2,5}\b/g) ?? []).map((x) => x.replace("$", ""))));
-  const post: Post = { id: uid("p"), authorId: userId, createdAt: now(), tickers, ...input, body };
+  const post: Post = { id: newId("p"), authorId: userId, createdAt: now(), tickers, ...input, body };
   setState((s) => ({ ...s, posts: [post, ...s.posts] }));
+  sync((sb) => remote.createPost(sb, post));
   return post;
 }
 
@@ -171,7 +250,9 @@ export function toggleReaction(targetType: "post" | "duel", targetId: string, ki
   setState((s) => {
     const existing = s.reactions.find((r) => r.targetType === targetType && r.targetId === targetId && r.userId === userId);
     let reactions = s.reactions.filter((r) => r !== existing);
-    if (!existing || existing.kind !== kind) reactions = [...reactions, { targetType, targetId, userId, kind }];
+    const next = !existing || existing.kind !== kind ? kind : null;
+    if (next) reactions = [...reactions, { targetType, targetId, userId, kind }];
+    sync((sb) => remote.setReaction(sb, targetType, targetId, userId, next));
     return { ...s, reactions };
   });
 }
@@ -181,13 +262,15 @@ export function addComment(targetType: "post" | "duel", targetId: string, body: 
   const text = body.trim();
   if (!text || text.length > 300) throw new ActionError("comments need 1–300 characters");
   throttle("comment", 8, 60_000);
-  const c: Comment = { id: uid("cm"), targetType, targetId, authorId: userId, body: text, createdAt: now() };
+  const c: Comment = { id: newId("cm"), targetType, targetId, authorId: userId, body: text, createdAt: now() };
   setState((s) => ({ ...s, comments: [...s.comments, c] }));
+  sync((sb) => remote.addComment(sb, c));
 }
 
 export function deleteComment(id: string) {
   const userId = requireUser();
   setState((s) => ({ ...s, comments: s.comments.filter((c) => !(c.id === id && c.authorId === userId)) }));
+  sync((sb) => remote.deleteComment(sb, id));
 }
 
 export function toggleFollow(followeeId: string) {
@@ -195,6 +278,7 @@ export function toggleFollow(followeeId: string) {
   if (userId === followeeId) return;
   setState((s) => {
     const has = s.follows.some((f) => f.followerId === userId && f.followeeId === followeeId);
+    sync((sb) => remote.follow(sb, userId, followeeId, !has));
     return {
       ...s,
       follows: has
@@ -208,6 +292,7 @@ export function toggleMembership(communityId: string) {
   const userId = requireUser();
   setState((s) => {
     const has = s.memberships.some((m) => m.communityId === communityId && m.userId === userId);
+    sync((sb) => remote.membership(sb, communityId, userId, !has));
     return {
       ...s,
       memberships: has
@@ -223,21 +308,28 @@ export function createCommunity(input: { name: string; description: string; emoj
   if (name.length < 3 || name.length > 40) throw new ActionError("names need 3–40 characters");
   const slug = name.replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
   if (state.communities.some((c) => c.slug === slug)) throw new ActionError("a community with that name already exists");
-  const c: Community = { id: uid("c"), slug, name, description: input.description.trim().slice(0, 200), emoji: input.emoji || "💬", tickers: input.tickers, createdBy: userId, createdAt: now() };
+  const c: Community = { id: newId("c"), slug, name, description: input.description.trim().slice(0, 200), emoji: input.emoji || "💬", tickers: input.tickers, createdBy: userId, createdAt: now() };
   setState((s) => ({ ...s, communities: [...s.communities, c], memberships: [...s.memberships, { communityId: c.id, userId }] }));
+  sync((sb) => remote.createCommunity(sb, c));
   return c;
 }
 
 export function markAllRead() {
+  const uidNow = me();
+  if (uidNow) sync((sb) => remote.markRead(sb, "all", uidNow));
   setState((s) => ({ ...s, notifications: s.notifications.map((n) => (n.userId === me() ? { ...n, read: true } : n)) }));
 }
 
 export function markRead(id: string) {
+  const uidNow = me();
+  if (uidNow) sync((sb) => remote.markRead(sb, [id], uidNow));
   setState((s) => ({ ...s, notifications: s.notifications.map((n) => (n.id === id ? { ...n, read: true } : n)) }));
 }
 
 export function pickDaily(session: string, ticker: string) {
   const userId = requireUser();
+  if (state.daily.find((d) => d.session === session)?.picks[userId]) return;
+  sync(async (sb) => { const d = state.daily.find((x) => x.session === session); if (d) await remote.ensureDaily(sb, d); await remote.pickDaily(sb, session, userId, ticker); });
   setState((s) => ({
     ...s,
     daily: s.daily.map((d) => (d.session === session && !d.picks[userId] ? { ...d, picks: { ...d.picks, [userId]: ticker } } : d)),
@@ -245,6 +337,7 @@ export function pickDaily(session: string, ticker: string) {
 }
 
 export function ensureDaily(entry: DailyBeef) {
+  if (REMOTE && !loaded) return;
   if (state.daily.some((d) => d.session === entry.session)) return;
   setState((s) => ({ ...s, daily: [entry, ...s.daily] }));
 }
@@ -259,6 +352,7 @@ export function updateProfile(patch: Partial<Pick<User, "username" | "displayNam
   }
   if (patch.bio !== undefined && patch.bio.length > 160) throw new ActionError("keep your bio under 160 characters");
   setState((s) => ({ ...s, users: s.users.map((x) => (x.id === userId ? { ...x, ...patch } : x)) }));
+  sync((sb) => remote.updateProfile(sb, userId, patch));
 }
 
 // ---------- session ----------
@@ -271,11 +365,14 @@ export function signUpDemo(email: string) {
   setState((s) => ({ ...s, session: { ...s.session, userId: ME, email, onboarded: false, ageConfirmed: false } }));
 }
 
-export function completeOnboarding() {
+export function completeOnboarding(country?: string) {
+  const userId = me();
+  if (userId) sync((sb) => remote.updateProfile(sb, userId, { onboarded: true, isAdult: true, country }));
   setState((s) => ({ ...s, session: { ...s.session, onboarded: true, ageConfirmed: true } }));
 }
 
 export function signOut() {
+  if (REMOTE) { void getBrowserSupabase()?.auth.signOut(); }
   setState((s) => ({ ...s, session: { ...s.session, userId: null, email: undefined } }));
 }
 
@@ -316,7 +413,7 @@ export function practiceBalance(s: BeefState, userId = ME): number {
   return Math.round(bal * 100) / 100;
 }
 
-export function createDuel(input: CreateDuelInput): Duel {
+export async function createDuel(input: CreateDuelInput): Promise<Duel> {
   const userId = requireUser();
   if (!state.session.ageConfirmed) throw new ActionError("confirm you're 18+ in onboarding first");
   throttle("duel", 4, 60_000);
@@ -336,7 +433,7 @@ export function createDuel(input: CreateDuelInput): Duel {
   if (dupe) throw new ActionError("you already sent this exact challenge. it's waiting in your duels.");
   const created = now();
   const duel: Duel = {
-    id: uid("d"), createdBy: userId, createdAt: created,
+    id: newId("d"), createdBy: userId, createdAt: created,
     participants: [
       { userId, ticker: input.myTicker, accepted: true, acceptedAt: created },
       { userId: input.opponentId ?? "", ticker: input.opponentTicker, accepted: false },
@@ -348,6 +445,7 @@ export function createDuel(input: CreateDuelInput): Duel {
     status: "pending", startSnapshots: [], endSnapshots: [], title: input.title?.trim() || undefined,
     communityId: input.communityId, terms: { ...DEFAULT_TERMS },
   };
+  if (REMOTE) await syncNow((sb) => remote.createDuel(sb, duel));
   setState((s) => ({ ...s, duels: [duel, ...s.duels] }));
   return duel;
 }
@@ -360,7 +458,7 @@ function activateIfAllAccepted(d: Duel): Duel {
 }
 
 /** current user accepts (or takes the open slot of) a duel */
-export function acceptDuel(id: string, acceptTerms: boolean) {
+export async function acceptDuel(id: string, acceptTerms: boolean) {
   const userId = requireUser();
   if (!acceptTerms) throw new ActionError("you need to agree to the terms first");
   const d = state.duels.find((x) => x.id === id);
@@ -372,6 +470,7 @@ export function acceptDuel(id: string, acceptTerms: boolean) {
   const openSlot = d.participants.findIndex((p) => p.userId === "");
   const idx = slot >= 0 ? slot : d.open ? openSlot : -1;
   if (idx < 0) throw new ActionError(d.participants.some((p) => p.userId === userId) ? "you've already accepted" : "this challenge isn't for you");
+  if (REMOTE) { await syncNow((sb) => remote.rpc(sb, "accept_duel", id)); await reloadRemote(); return; }
   setState((s) => ({
     ...s,
     duels: s.duels.map((x) => {
@@ -382,24 +481,27 @@ export function acceptDuel(id: string, acceptTerms: boolean) {
   }));
 }
 
-export function declineDuel(id: string) {
+export async function declineDuel(id: string) {
   const userId = requireUser();
+  if (REMOTE) { await syncNow((sb) => remote.rpc(sb, "decline_duel", id)); await reloadRemote(); return; }
   setState((s) => ({
     ...s,
     duels: s.duels.map((x) => (x.id === id && x.status === "pending" && x.participants.some((p) => p.userId === userId && !p.accepted) ? { ...x, status: "declined" } : x)),
   }));
 }
 
-export function cancelDuel(id: string) {
+export async function cancelDuel(id: string) {
   const userId = requireUser();
   const d = state.duels.find((x) => x.id === id);
   if (!d || d.createdBy !== userId) throw new ActionError("only the creator can cancel");
   if (d.status !== "pending") throw new ActionError("only pending duels can be cancelled. once accepted, terms are locked.");
+  if (REMOTE) { await syncNow((sb) => remote.rpc(sb, "cancel_duel", id)); await reloadRemote(); return; }
   setState((s) => ({ ...s, duels: s.duels.map((x) => (x.id === id ? { ...x, status: "cancelled" } : x)) }));
 }
 
 /** demo-only: a seeded opponent accepts the invitation */
 export function simulateOpponentAccept(id: string) {
+  if (REMOTE) throw new ActionError("in live mode your friend has to accept it themselves");
   setState((s) => ({
     ...s,
     duels: s.duels.map((x) => {
@@ -415,12 +517,19 @@ export function simulateOpponentAccept(id: string) {
 }
 
 export function expireStaleInvites() {
+  if (REMOTE) return; // the database / cron owns duel status
   const t = Date.now();
   if (!state.duels.some((d) => d.status === "pending" && new Date(d.inviteExpiresAt).getTime() < t)) return;
   setState((s) => ({ ...s, duels: s.duels.map((d) => (d.status === "pending" && new Date(d.inviteExpiresAt).getTime() < t ? { ...d, status: "expired" } : d)) }));
 }
 
 // ---------- invitation links ----------
+
+/** supabase mode: the duel lives in the database, so the link is just its page.
+ *  demo mode: the terms travel in the url fragment so another device can import them. */
+export function inviteLink(d: Duel): string {
+  return REMOTE ? `/duel/${d.id}` : `/invite#${encodeInvite(d)}`;
+}
 
 /** encodes the terms of a pending duel so the link works on another device in demo mode */
 export function encodeInvite(d: Duel): string {
@@ -480,8 +589,10 @@ async function post<T>(url: string, body: unknown): Promise<T> {
 export async function requestLock(id: string, simulateAt?: string) {
   const d = state.duels.find((x) => x.id === id);
   if (!d || d.status !== "accepted") return;
-  const r = await post<{ ok: boolean; snapshots: PriceSnapshot[]; lockAt: string; issues: string[] }>("/api/duels/lock", { duel: toSettleable(d), simulateAt });
+  // supabase mode: the server loads the duel from the database by id
+  const r = await post<{ ok: boolean; snapshots: PriceSnapshot[]; lockAt: string; issues: string[] }>("/api/duels/lock", REMOTE ? { duelId: id, simulateAt } : { duel: toSettleable(d), simulateAt });
   if (!r.ok) throw new ActionError(r.issues.join("; ") || "prices are not ready to lock yet");
+  if (REMOTE) { await reloadRemote(); return; }
   setState((s) => ({
     ...s,
     duels: s.duels.map((x) => (x.id === id && x.status === "accepted" ? { ...x, status: "active", activatedAt: r.lockAt, startSnapshots: r.snapshots } : x)),
@@ -496,10 +607,11 @@ export async function requestSettlement(id: string, simulateAt?: string) {
   if (!d || !["active", "awaiting_verification"].includes(d.status)) return;
   if (d.settlement && d.settlement.status !== "needs_verification") return; // idempotent on the client too
   const r = await post<{ outcome: string; settlement?: Settlement; startSnapshots?: PriceSnapshot[]; endSnapshots?: PriceSnapshot[]; audit?: AuditLog[]; dueAt?: string; reason?: string }>(
-    "/api/duels/settle", { duel: toSettleable(d), simulateAt },
+    "/api/duels/settle", REMOTE ? { duelId: id, simulateAt } : { duel: toSettleable(d), simulateAt },
   );
   if (r.outcome === "not_due") throw new ActionError("this duel hasn't reached its deadline close yet");
   if (r.outcome === "rejected") throw new ActionError(r.reason ?? "settlement rejected");
+  if (REMOTE) { await reloadRemote(); return; }
   const settlement = r.settlement!;
   const status = settlement.status === "needs_verification" ? "awaiting_verification" : "completed";
   const mine = d.participants.some((p) => p.userId === ME);
@@ -522,6 +634,8 @@ export async function tickDuels() {
   expireStaleInvites();
   const t = Date.now();
   for (const d of state.duels) {
+    // in supabase mode the server only lets participants trigger lock/settle (cron covers the rest)
+    if (REMOTE && !d.participants.some((p) => p.userId === state.session.userId)) continue;
     try {
       if (d.status === "accepted" && d.lockAt && new Date(d.lockAt).getTime() <= t) await requestLock(d.id);
       else if (d.status === "active" && new Date(d.deadline).getTime() <= t) await requestSettlement(d.id);

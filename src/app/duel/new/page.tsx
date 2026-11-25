@@ -8,7 +8,7 @@ import type { Duel, User } from "@/lib/types";
 import { getAsset } from "@/lib/market/assets";
 import { deadlineOptions, nextCloseAfter, sessionCloseUtc } from "@/lib/market/calendar";
 import {
-  MAX_STAKE, STAKE_OPTIONS, createDuel, encodeInvite, practiceBalance, simulateOpponentAccept, useBeef,
+  MAX_STAKE, REMOTE, STAKE_OPTIONS, createDuel, inviteLink, practiceBalance, simulateOpponentAccept, useBeef,
 } from "@/lib/store/store";
 import { rivalsOf, useMe } from "@/lib/hooks";
 import { cx, marketTime, usd } from "@/lib/format";
@@ -131,7 +131,7 @@ function NewDuelInner() {
 
   // ---------- success ----------
   if (created) {
-    const link = absoluteUrl(`/invite#${encodeInvite(created)}`);
+    const link = absoluteUrl(inviteLink(created));
     const live = s.duels.find((d) => d.id === created.id) ?? created;
     const names = created.participants.filter((p) => p.userId && p.userId !== me.id).map((p) => userById(p.userId)?.displayName).join(", ");
     return (
@@ -147,7 +147,7 @@ function NewDuelInner() {
             <button className="btn-dark btn-sm" onClick={() => shareLink(link, `${me.displayName} challenged you on beef: ${created.participants.map((p) => p.ticker).join(" vs ")}, ${usd(stake, 0)} each.`)}><Share2 size={15} /> share</button>
           </div>
         </div>
-        {live.status === "pending" && (
+        {live.status === "pending" && !REMOTE && (
           <div className="card mt-3 border-dashed p-4 text-left">
             <p className="flex items-center gap-2 text-sm font-semibold"><SimBadge label="demo" /> no friends online right now?</p>
             <p className="mt-1 text-sm text-muted">simulate them accepting to see the rest of the flow.</p>

@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "db:seed-sql": "tsx scripts/generate-seed-sql.ts",
-    "e2e": "node e2e/flows.js && node e2e/routes.js"
+    "e2e": "node e2e/flows.js && node e2e/routes.js",
+    "e2e:supabase": "node e2e/supabase.js"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.7",
