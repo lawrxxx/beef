@@ -17,7 +17,9 @@ npm run build && npm start      # production server on http://localhost:3000
 npm run dev                      # dev server with hot reload
 ```
 
-no credentials needed: without supabase env vars the app runs in **demo mode** with a seeded world (13 users, 24 posts, 18 duels, 5 communities, notifications, rivalries). you're signed in as `@demo` automatically; sign out to browse as a guest.
+no credentials needed: without supabase env vars the app runs in **demo mode** with a seeded world: 13 users, 25 posts, 63 duels (52 settled), 5 communities, notifications and rivalries. you're signed in as `@demo` automatically; sign out to browse as a guest.
+
+the demo is anchored to *today*: live duels, invites and recent results are placed relative to the current trading session, so the demo never goes stale. leaderboards, records, streaks and rivalries are all computed from those settled duels. nothing is hardcoded. the reference duels below keep fixed dates because they use scripted simulated prices.
 
 | command | what it does |
 |---|---|
@@ -32,7 +34,8 @@ no credentials needed: without supabase env vars the app runs in **demo mode** w
 
 ## what to try in the demo
 
-- **create a duel**: duel tab → pick two stocks → stake → deadline → opponent → review → send.
+- **create a duel**: *start a beef* → who (a friend, an open challenge, or a group of up to 6) → the two stocks → your side → stake (your stake and the prize pool shown separately) → deadline → review → send & share. every step validates, and a double tap can't create two duels.
+- **answer invites**: `/duel/d_inv` (accept) and `/duel/d_inv2` (decline) are waiting on the home screen.
 - **demo time controls** on any live duel: *simulate acceptance* → *jump to price lock* → *jump to deadline & settle*. the server fetches simulated closes and decides the winner. you can skip the wait, but you can't choose the prices.
 - **reference outcomes**: [`/duel/d_rise`](http://localhost:3000/duel/d_rise) (both rise: nvda +5% beats aapl +3%), [`/duel/d_fall`](http://localhost:3000/duel/d_fall) (both fall: meta −2% beats tsla −5%), [`/duel/d_draw`](http://localhost:3000/duel/d_draw) (identical +3% returns), [`/duel/d_halt`](http://localhost:3000/duel/d_halt) (paused: simulated trading halt), [`/duel/d_group`](http://localhost:3000/duel/d_group) (4-way group beef).
 - **invite links work across devices**: the challenge terms travel in the url fragment, so a friend can open the link on another phone and accept.
@@ -78,14 +81,18 @@ copy `.env.example` → `.env.local`.
 
 the schema, seed, rls policies, triggers and rpcs were verified against postgres 16 with stubbed `auth`/`storage` schemas.
 
-### current integration status (honest version)
+### known limitations
 
-| area | demo mode | supabase mode |
-|---|---|---|
-| auth (email sign up/in/out, reset, update password) | local | ✅ supabase auth |
-| avatar upload | data url | ✅ supabase storage |
-| lock / settle / cron | ✅ server, in-memory idempotency | ✅ server, postgres-backed idempotency + audit |
-| social data (posts, duels, follows…) reads & writes | ✅ local store | ⚠️ schema + rls ready; the ui still reads the local store. wiring the store actions to supabase queries is the next step |
+| area | status |
+|---|---|
+| auth (email sign up/in/out, reset, update password), avatar upload | ✅ supabase when configured, local in demo mode |
+| lock / settle / cron | ✅ server-side; postgres-backed idempotency + audit when configured, in-memory in demo mode |
+| social data (posts, duels, follows…) | ⚠️ the schema, rls and rpcs are ready and tested, but the ui still reads and writes the local demo store. adding supabase keys alone does **not** make social data shared. that wiring is the next step |
+| demo settlement requests | the browser sends duel terms to `/api/duels/settle` in demo mode (prices are always fetched by the server). in supabase mode the server loads terms from the database instead |
+| market data | only the simulated provider has been exercised. the polygon / finnhub / alpha vantage adapters are written but untested without api keys |
+| `supabase/seed.sql` | generated from the time-relative seed, so its dates are fixed at generation time. rerun `npm run db:seed-sql` before seeding |
+| rate limiting | in-memory per server instance |
+| escrow contract | reference design only. not audited, not deployed. real money is disabled in code and in the schema |
 
 ## market data
 
@@ -106,11 +113,13 @@ every price in the ui is labelled *simulated* when it comes from the mock provid
 - both stocks use exactly the same window. timestamps are stored in utc, shown in et.
 - returns are compared at 4 decimals of a percentage point; equal ⇒ draw (stakes returned). group beefs rank everyone; ties for first share the pot.
 - splits between lock and end adjust the starting price by the split ratio.
-- missing, halted, invalid, mistimed or future-dated closes ⇒ `needs_verification`; **no winner is declared** until data is reliable.
+- missing, halted, invalid, mistimed or future-dated closes, and failed or timed-out provider requests ⇒ `needs_verification`; **no winner is declared** and nothing is recorded until data is reliable. the next run retries.
 
 the pure engine is `src/lib/settlement/engine.ts` (`pct-return-v1`). the service (`service.ts`) runs the 11 steps (deadline check → fetch → validate source → verify timestamps → adjust splits → compute → compare → decide → record-if-absent → status → notify), is idempotent (insert-if-absent; concurrent calls store exactly one result) and writes an audit log. the browser can only *ask* to settle: it never sends prices, and in supabase mode the server loads the duel from the database and checks that the caller is a participant.
 
-tests: `npm test` covers the brief's examples, both-rise / both-fall / identical, dollar-gain vs percent, group ties, dst and holidays, missing data, trading halts, split adjustment, idempotency and concurrent settlement.
+tests: `npm test` (27 tests) covers the brief's examples, both rise / both fall / one up one down / flat / identical, dollar gain vs percent, group ties, dst and holidays, missing data, provider outages, trading halts, split adjustment, the shared comparison window, idempotency and concurrent settlement.
+
+end-to-end: `npm run e2e` (playwright, against a running server; set `BASE_URL` for a deployment) drives 45 checks on a phone viewport: the full create → accept → lock → settle loop, double-tap protection, accept/decline, group beefs, rematch prefill, comments, reactions, follows, trophy cards, notifications, every leaderboard period × category, wallet activity, profiles, communities, sign out / sign up / onboarding, and cross-device invite links. it also crawls every route for console errors and horizontal overflow, and checks the service worker and offline fallback.
 
 ## base / onchain
 

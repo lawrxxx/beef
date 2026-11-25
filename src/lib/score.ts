@@ -1,4 +1,4 @@
-import type { Duel, User } from "@/lib/types";
+import type { Duel } from "@/lib/types";
 
 export interface UserStats {
   completed: number;
@@ -36,23 +36,28 @@ export function beefScore(s: Omit<UserStats, "score">): number {
   return Math.max(0, Math.round(1000 + skill + experience + streak + community));
 }
 
-export function computeStats(userId: string, duels: Duel[], activity: number, user?: User): UserStats {
+/** when a duel's result counts (settlement time, falling back to the deadline) */
+export function settledTime(d: Duel) {
+  return new Date(d.settlement?.settledAt ?? d.deadline).getTime();
+}
+
+/**
+ * stats from settled duels only. `since` (ms) limits results to a period, used by the
+ * weekly and monthly leaderboards. nothing here is hardcoded: it is all derived from
+ * the duels in the app.
+ */
+export function computeStats(userId: string, duels: Duel[], activity: number, since = 0): UserStats {
   const mine = duels
     .filter((d) => d.participants.some((p) => p.userId === userId))
-    .sort((a, b) => (a.settlement?.settledAt ?? a.deadline).localeCompare(b.settlement?.settledAt ?? b.deadline));
+    .sort((a, b) => settledTime(a) - settledTime(b));
   let wins = 0, losses = 0, draws = 0, streak = 0, bestStreak = 0, active = 0;
   for (const d of mine) {
     if (["active", "accepted", "pending", "awaiting_verification"].includes(d.status)) active++;
     const o = outcomeFor(d, userId);
+    if (!o || settledTime(d) < since) continue;
     if (o === "win") { wins++; streak++; bestStreak = Math.max(bestStreak, streak); }
     else if (o === "loss") { losses++; streak = 0; }
-    else if (o === "draw") { draws++; }
-  }
-  // seeded history (users who have been around longer than the demo data)
-  const hist = user?.monthly;
-  if (hist && userId !== "u_me") {
-    wins += hist.wins * 2; losses += hist.losses * 2; draws += hist.draws;
-    bestStreak = Math.max(bestStreak, Math.min(hist.wins, 9));
+    else { draws++; }
   }
   const completed = wins + losses + draws;
   const winRate = completed ? (wins / completed) * 100 : 0;

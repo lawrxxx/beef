@@ -168,9 +168,6 @@ export interface User {
   favoriteStocks: Ticker[];
   joinedAt: string;
   verified?: boolean;
-  /** seeded period stats for weekly/monthly boards */
-  weekly?: { wins: number; losses: number; draws: number };
-  monthly?: { wins: number; losses: number; draws: number };
 }
 
 export type PostKind = "opinion" | "duel" | "result" | "text";

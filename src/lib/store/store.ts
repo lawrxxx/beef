@@ -10,6 +10,7 @@ import {
   seedNotifications, seedPosts, seedReactions, seedTransactions, seedUsers, DEFAULT_TERMS,
 } from "@/data/seed";
 import { uid } from "@/lib/format";
+import { getAsset } from "@/lib/market/assets";
 import { nextCloseAfter, sessionCloseUtc } from "@/lib/market/calendar";
 
 export interface SessionState {
@@ -38,8 +39,8 @@ export interface BeefState {
   installDismissedAt?: number;
 }
 
-const VERSION = 3;
-const KEY = "beef:demo:v3";
+const VERSION = 4;
+const KEY = "beef:demo:v4";
 
 function seedState(): BeefState {
   return {
@@ -77,12 +78,23 @@ export function loadPersisted() {
       const parsed = JSON.parse(raw) as BeefState;
       if (parsed.version === VERSION) {
         state = parsed;
-        emit();
       }
     }
   } catch {
     /* corrupt storage – fall back to seed */
   }
+  emit();
+}
+
+/** true once saved data (if any) has been loaded. pages render after this, so the
+ *  seed never flashes before a returning user's data, and nothing time-dependent is
+ *  rendered on the server. */
+export function useStoreReady(): boolean {
+  return useSyncExternalStore(
+    (cb) => { listeners.add(cb); return () => listeners.delete(cb); },
+    () => loaded,
+    () => false,
+  );
 }
 
 export function getState() {
@@ -313,6 +325,15 @@ export function createDuel(input: CreateDuelInput): Duel {
   if (!STAKE_OPTIONS.includes(input.stake) || input.stake > MAX_STAKE) throw new ActionError("pick a stake from the list");
   if (input.stake > practiceBalance(state, userId)) throw new ActionError("not enough practice balance for this stake");
   if (new Date(input.deadline).getTime() <= Date.now()) throw new ActionError("the deadline must be in the future");
+  if (!getAsset(input.myTicker) || !getAsset(input.opponentTicker) || (input.extra ?? []).some((e) => !getAsset(e.ticker))) throw new ActionError("pick supported stocks");
+  if (input.opponentId === userId || (input.extra ?? []).some((e) => e.userId === userId)) throw new ActionError("you can't challenge yourself");
+  if (input.opponentId && !state.users.some((u) => u.id === input.opponentId)) throw new ActionError("that person isn't on beef");
+  if (input.extra && new Set([input.opponentId, ...input.extra.map((e) => e.userId)]).size !== input.extra.length + 1) throw new ActionError("each friend can only join once");
+  // duplicate guard: the same open challenge already exists
+  const dupe = state.duels.find((d) => d.createdBy === userId && d.status === "pending"
+    && d.participants[0]?.ticker === input.myTicker && d.participants[1]?.ticker === input.opponentTicker
+    && (d.participants[1]?.userId || null) === (input.opponentId ?? null) && d.stake === input.stake);
+  if (dupe) throw new ActionError("you already sent this exact challenge. it's waiting in your duels.");
   const created = now();
   const duel: Duel = {
     id: uid("d"), createdBy: userId, createdAt: created,

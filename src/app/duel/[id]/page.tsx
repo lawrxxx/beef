@@ -40,7 +40,8 @@ function DuelView({ d }: { d: Duel }) {
   const [showTerms, setShowTerms] = useState(false);
   const [agree, setAgree] = useState(false);
   const live = d.status === "active";
-  const { quotes, error: quoteError } = useQuotes(live ? d.participants.map((p) => p.ticker) : [], 15_000);
+  const showQuotes = live || d.status === "pending" || d.status === "accepted";
+  const { quotes, error: quoteError } = useQuotes(showQuotes ? d.participants.map((p) => p.ticker) : [], 15_000);
   const perf = livePerformance(d, quotes);
   const st = d.settlement;
   const done = d.status === "completed" && st;
@@ -104,17 +105,25 @@ function DuelView({ d }: { d: Duel }) {
         </div>
         {!group && (live || done) && <div className="px-5 pb-4"><VersusBar a={perf[0]?.ret ?? null} b={perf[1]?.ret ?? null} /></div>}
 
-        <div className="grid grid-cols-2 border-t text-center">
+        <div className="grid grid-cols-3 border-t text-center">
           <div className="border-r p-3">
-            <p className="text-xs text-muted">{done ? "ended" : live ? "time left" : d.status === "accepted" ? "prices lock in" : "deadline"}</p>
+            <p className="text-xs text-muted">{done ? "ended" : live ? "time left" : d.status === "accepted" ? "prices lock in" : d.status === "awaiting_verification" ? "status" : "length"}</p>
             <p className="num mt-0.5 font-semibold">
-              {done ? sessionLabel(st.endSession) : live ? countdown(d.deadline, now) : d.status === "accepted" && d.lockAt ? countdown(d.lockAt, now) : d.deadlineLabel}
+              {done ? sessionLabel(st.endSession) : live ? countdown(d.deadline, now) : d.status === "accepted" && d.lockAt ? countdown(d.lockAt, now) : d.status === "awaiting_verification" ? "paused" : d.deadlineLabel}
             </p>
           </div>
-          <div className="p-3">
-            <p className="text-xs text-muted">{done ? "winning margin" : "total prize"}</p>
-            <p className="num mt-0.5 font-semibold">{done ? (st.status === "draw" ? "0.00 pts" : `${st.marginPct.toFixed(2)} pts`) : usd(pot, 0)}</p>
+          <div className="border-r p-3">
+            <p className="text-xs text-muted">stake</p>
+            <p className="num mt-0.5 font-semibold">{usd(d.stake, 0)} each</p>
           </div>
+          <div className="p-3">
+            <p className="text-xs text-muted">prize pool</p>
+            <p className="num mt-0.5 font-semibold">{usd(pot, 0)}</p>
+          </div>
+        </div>
+        <div className="flex items-center justify-between border-t px-4 py-2.5 text-[13px]">
+          <span className="text-muted">settlement</span>
+          <span className="font-medium">{SETTLEMENT_LABEL(d)}</span>
         </div>
       </div>
 
@@ -182,7 +191,7 @@ function DuelView({ d }: { d: Duel }) {
       </div>
 
       {/* price table */}
-      {(live || done || d.status === "awaiting_verification") && (
+      {(live || done || d.status === "awaiting_verification" || d.status === "pending" || d.status === "accepted") && (
         <div className="card mt-4 overflow-hidden">
           <div className="flex items-center justify-between border-b px-4 py-3">
             <p className="font-semibold">prices</p>
@@ -198,7 +207,7 @@ function DuelView({ d }: { d: Duel }) {
                   <tr key={p.ticker}>
                     <td className="px-4 py-2.5"><span className="font-bold">{p.ticker}</span> <span className="text-muted">@{usersMap[p.userId]?.username}</span></td>
                     <td className="num px-2 py-2.5">
-                      {p.startPrice != null ? price(p.startPrice) : "—"}
+                      {p.startPrice != null ? price(p.startPrice) : <span className="text-[12px] text-muted">locks at close</span>}
                       {p.adjustedStart != null && <span className="block text-[11px] text-gold">split-adj. {price(p.adjustedStart)}</span>}
                     </td>
                     <td className="num px-2 py-2.5">{p.current != null ? price(p.current) : "—"}{live && <span className="block text-[11px] text-muted">{p.quote?.marketOpen ? "live (simulated)" : "last close (simulated)"}</span>}</td>
@@ -278,4 +287,17 @@ function DuelView({ d }: { d: Duel }) {
       <p className="mt-4 text-center text-xs text-faint">{STATUS_LABEL[d.status]} · id {d.id}</p>
     </div>
   );
+}
+
+function SETTLEMENT_LABEL(d: Duel): string {
+  switch (d.status) {
+    case "pending": return "starts once everyone accepts";
+    case "accepted": return "terms locked · prices lock at the close";
+    case "active": return "pending · settles at the deadline close";
+    case "awaiting_verification": return "paused · waiting for verified prices";
+    case "completed": return d.settlement?.status === "draw" ? "settled · draw, stakes returned" : "settled · winner paid (practice money)";
+    case "cancelled": return "cancelled · nothing was staked";
+    case "declined": return "declined · nothing was staked";
+    case "expired": return "invite expired · nothing was staked";
+  }
 }

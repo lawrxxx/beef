@@ -15,7 +15,7 @@ export async function POST(req: Request) {
   if (r.ok && ctx.mode === "supabase") {
     const db = getAdminSupabase()!;
     await saveSnapshots(db, ctx.duel.id, r.snapshots);
-    await db.from("duels").update({ status: "active", activated_at: r.lockAt }).eq("id", ctx.duel.id).eq("status", "accepted");
+    await db.from("duels").update({ status: "active", lock_at: r.lockAt, activated_at: r.lockAt }).eq("id", ctx.duel.id).eq("status", "accepted");
   }
   return NextResponse.json(r);
 }

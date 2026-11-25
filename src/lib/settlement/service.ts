@@ -42,13 +42,28 @@ export class InMemorySettlementRepository implements SettlementRepository {
 
 function validateClose(c: ClosePrice, now: Date): string | null {
   if (c.status === "halted") return `${c.ticker}: trading halted on ${c.session}`;
-  if (c.status === "missing") return `${c.ticker}: no official close available for ${c.session}`;
+  if (c.status === "missing") {
+    const err = (c as ClosePrice & { error?: string }).error;
+    return err ? `${c.ticker}: price request failed for ${c.session} (${err})` : `${c.ticker}: no official close available for ${c.session}`;
+  }
   if (c.status === "invalid") return `${c.ticker}: invalid price data for ${c.session}`;
   if (!(c.close > 0) || !Number.isFinite(c.close)) return `${c.ticker}: non-positive close on ${c.session}`;
   const expected = sessionCloseUtc(c.session).toISOString();
   if (c.timestamp !== expected) return `${c.ticker}: timestamp ${c.timestamp} does not match the official close ${expected}`;
   if (new Date(c.timestamp).getTime() > now.getTime()) return `${c.ticker}: close for ${c.session} is in the future`;
   return null;
+}
+
+/** a provider outage or timeout becomes "missing" data, never an exception or a guess */
+async function safeClose(provider: MarketDataProvider, ticker: string, session: string): Promise<ClosePrice> {
+  try {
+    return await provider.getClose(ticker, session);
+  } catch (e) {
+    return {
+      ticker, session, close: 0, timestamp: "", source: provider.id, simulated: provider.simulated, status: "missing",
+      error: e instanceof Error ? e.message : "request failed",
+    } as ClosePrice & { error: string };
+  }
 }
 
 export function lockSessionFor(acceptedAt: string): string {
@@ -75,7 +90,7 @@ export async function lockStartPrices(
   const issues: string[] = [];
   const snapshots: PriceSnapshot[] = [];
   for (const p of duel.participants) {
-    const c = await provider.getClose(p.ticker, lockSession);
+    const c = await safeClose(provider, p.ticker, lockSession);
     const err = validateClose(c, now);
     if (err) issues.push(err);
     else snapshots.push({
@@ -125,13 +140,19 @@ export async function settleDuel(
   const inputs: { userId: string; ticker: string; startPrice: number; endPrice: number }[] = [];
 
   for (const p of duel.participants) {
-    const [s, e] = await Promise.all([provider.getClose(p.ticker, lockSession), provider.getClose(p.ticker, endSession)]);
+    const [s, e] = await Promise.all([safeClose(provider, p.ticker, lockSession), safeClose(provider, p.ticker, endSession)]);
     const errs = [validateClose(s, now), validateClose(e, now)].filter(Boolean) as string[];
     if (s.source !== provider.id || e.source !== provider.id) errs.push(`${p.ticker}: price source mismatch`);
     if (errs.length) { issues.push(...errs); continue; }
 
     // split adjustment: express the starting price on the ending share basis
-    const actions = await provider.getCorporateActions(p.ticker, lockSession, endSession);
+    let actions;
+    try {
+      actions = await provider.getCorporateActions(p.ticker, lockSession, endSession);
+    } catch {
+      issues.push(`${p.ticker}: corporate actions (splits) could not be checked`);
+      continue;
+    }
     const factor = actions.filter((a) => a.type === "split").reduce((f, a) => f * a.ratio, 1);
     const adjustedStart = Math.round((s.close / factor) * 1e6) / 1e6;
     if (factor !== 1) {

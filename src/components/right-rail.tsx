@@ -57,3 +57,20 @@ export function RightRail() {
     </aside>
   );
 }
+
+/** compact horizontal trending row for mobile feeds */
+export function TrendingStrip() {
+  const s = useBeef();
+  const trending = useMemo(() => trendingTickers(s, 8), [s]);
+  const { quotes } = useQuotes(trending.map((t) => t.ticker));
+  return (
+    <div className="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4 pb-1">
+      {trending.map(({ ticker }) => (
+        <Link key={ticker} href={`/stock/${ticker}`} className="card shrink-0 px-3.5 py-2.5">
+          <p className="text-sm font-bold">{ticker}</p>
+          {quotes[ticker] ? <Pct v={quotes[ticker].changePct} className="text-[12px]" /> : <span className="skeleton mt-1 block h-3 w-12" />}
+        </Link>
+      ))}
+    </div>
+  );
+}

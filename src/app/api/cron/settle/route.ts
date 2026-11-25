@@ -26,15 +26,19 @@ export async function GET(req: Request) {
 
   await db.from("duels").update({ status: "expired" }).eq("status", "pending").lt("invite_expires_at", now.toISOString());
 
-  const { data: accepted } = await db.from("duels").select("id").eq("status", "accepted").lte("lock_at", now.toISOString()).limit(100);
+  // accept_duel only marks a duel accepted; the lock close is computed here from the
+  // acceptance time (lockStartPrices waits if that close hasn't happened yet)
+  const { data: accepted } = await db.from("duels").select("id").eq("status", "accepted").limit(200);
   for (const { id } of accepted ?? []) {
     const d = await loadSettleableDuel(db, id);
     if (!d) continue;
     const r = await lockStartPrices(d, provider, now);
     if (r.ok) {
       await saveSnapshots(db, id, r.snapshots);
-      await db.from("duels").update({ status: "active", activated_at: r.lockAt }).eq("id", id).eq("status", "accepted");
+      await db.from("duels").update({ status: "active", lock_at: r.lockAt, activated_at: r.lockAt }).eq("id", id).eq("status", "accepted");
       report.locked++;
+    } else if (!r.issues[0]?.startsWith("waiting")) {
+      report.errors.push(`${id}: ${r.issues.join("; ")}`);
     }
   }
 

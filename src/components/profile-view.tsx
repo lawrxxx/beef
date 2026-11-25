@@ -75,18 +75,18 @@ export function ProfileView({ user }: { user: User }) {
 
       <div className="mt-3 grid grid-cols-4 gap-2">
         {[
-          ["beef score", String(st.score)],
-          ["record", `${st.wins}-${st.losses}${st.draws ? `-${st.draws}` : ""}`],
-          ["win rate", st.completed ? `${st.winRate.toFixed(0)}%` : "—"],
-          ["streak", st.streak ? `${st.streak}🔥` : "0"],
-        ].map(([k, v]) => (
-          <div key={k} className="card px-2 py-3 text-center">
-            <p className="num font-display text-lg font-bold">{v}</p>
-            <p className="text-[11px] text-muted">{k}</p>
+          ["beef score", String(st.score), "reputation"],
+          ["win rate", st.completed ? `${st.winRate.toFixed(0)}%` : "—", `${st.wins}–${st.losses}${st.draws ? `–${st.draws}` : ""}`],
+          ["completed", String(st.completed), `${st.active} in progress`],
+          ["best streak", String(st.bestStreak), st.streak > 0 ? `${st.streak} now 🔥` : "no streak now"],
+        ].map(([k, v, sub]) => (
+          <div key={k} className="card px-1.5 py-3 text-center">
+            <p className="num font-display text-lg font-bold leading-tight">{v}</p>
+            <p className="text-[11px] font-medium text-ink-soft">{k}</p>
+            <p className="num truncate text-[10px] text-muted">{sub}</p>
           </div>
         ))}
       </div>
-      <p className="mt-2 text-center text-xs text-muted">{st.completed} completed duels · best streak {st.bestStreak} · {st.active} in progress</p>
 
       <Tabs<Tab> value={tab} onChange={setTab} className="mb-4 mt-5" options={[{ value: "activity", label: "activity" }, { value: "duels", label: "duels" }, { value: "rivalries", label: "rivalries" }, { value: "badges", label: `badges ${badges.filter((b) => b.unlocked).length}/${badges.length}` }]} />
 

@@ -3,14 +3,26 @@ import type {
   Reaction, ReactionKind, SimTransaction, User,
 } from "@/lib/types";
 import { mockCloseSync } from "@/lib/market/mock";
-import { nextCloseAfter, resolveEndSession, sessionCloseUtc, prevTradingDay, lastCloseAtOrBefore } from "@/lib/market/calendar";
+import { MOCK_CORPORATE_ACTIONS } from "@/lib/market/assets";
+import {
+  nextCloseAfter, resolveEndSession, sessionCloseUtc, prevTradingDay, nextTradingDay, lastCloseAtOrBefore,
+} from "@/lib/market/calendar";
 import { buildSettlement, compareReturns, CALCULATION_VERSION } from "@/lib/settlement/engine";
 
-// demo dataset. every price below comes from the deterministic simulated provider
-// and every result is computed by the same settlement engine the server uses.
+// demo dataset. every price comes from the deterministic simulated provider and
+// every result is computed by the same settlement engine the server uses.
+//
+// the live part of the demo (active duels, invites, recent history, posts) is anchored
+// to the current time, so the demo looks the same whenever it is opened. the three
+// reference duels (both rise / both fall / identical) and the halted-data duel keep
+// fixed dates because they rely on scripted simulated prices.
 
 export const ME = "u_me";
-export const SEED_NOW = "2026-11-25T17:00:00.000Z";
+
+const FIXED_REFERENCE_NOW = Date.parse("2026-11-25T17:00:00.000Z");
+/** "now" for the seed, rounded to 10 minutes so server and client agree */
+export const SEED_NOW = new Date(Math.floor(Math.max(Date.now(), FIXED_REFERENCE_NOW) / 600_000) * 600_000).toISOString();
+const NOW = new Date(SEED_NOW);
 
 export const DEFAULT_TERMS: DuelTerms = {
   methodology: "percent_return_official_close",
@@ -24,38 +36,47 @@ export const DEFAULT_TERMS: DuelTerms = {
 
 const u = (
   id: string, username: string, displayName: string, avatar: string, avatarColor: string, bio: string,
-  favoriteStocks: string[], monthly: [number, number, number], weekly: [number, number, number], verified = false,
-): User => ({
-  id, username, displayName, avatar, avatarColor, bio, favoriteStocks, verified,
-  joinedAt: "2026-06-01T12:00:00Z",
-  monthly: { wins: monthly[0], losses: monthly[1], draws: monthly[2] },
-  weekly: { wins: weekly[0], losses: weekly[1], draws: weekly[2] },
-});
+  favoriteStocks: string[], verified = false,
+): User => ({ id, username, displayName, avatar, avatarColor, bio, favoriteStocks, verified, joinedAt: "2026-06-01T12:00:00Z" });
 
 export const seedUsers: User[] = [
   { id: ME, username: "demo", displayName: "demo trader", avatar: "🧑‍🍳", avatarColor: "#FDE7D9", bio: "exploring beef in demo mode.", favoriteStocks: ["NVDA", "TSLA"], joinedAt: "2026-11-01T12:00:00Z" },
-  u("u_alex", "alexrivers", "alex rivers", "🦈", "#DCEBFF", "semis maxi. if it has a gpu i'm long.", ["NVDA", "AMD", "PLTR"], [9, 3, 1], [3, 1, 0], true),
-  u("u_maya", "mayabuys", "maya", "🌸", "#FBE3EE", "apple since the ipod. quality > hype.", ["AAPL", "COST", "MSFT"], [7, 4, 0], [2, 1, 0]),
-  u("u_jordan", "jordanj", "jordan j", "🏀", "#FFF1CC", "fantasy football brain applied to stocks.", ["MSFT", "TSLA", "AMZN"], [6, 5, 1], [2, 2, 0]),
-  u("u_sam", "samtrades", "sam", "🎧", "#E3F6EA", "short attention span, long conviction.", ["COIN", "TSLA"], [4, 6, 0], [1, 2, 0]),
-  u("u_priya", "priyacharts", "priya", "📐", "#EAE6FF", "charts tell stories. i read them.", ["AMZN", "GOOGL", "MSFT"], [8, 2, 1], [3, 0, 0], true),
-  u("u_leo", "leolongterm", "leo", "🐢", "#E6F2EF", "buy, hold, touch grass.", ["GOOGL", "KO", "JPM"], [5, 3, 2], [1, 1, 1]),
-  u("u_nia", "niaonfire", "nia", "🔥", "#FFE2DC", "meta bull. reels are the new tv.", ["META", "NFLX"], [6, 4, 0], [2, 1, 0]),
-  u("u_kai", "kaiyolo", "kai", "🚀", "#E2F0FF", "here for the vibes and the volatility.", ["GME", "PLTR", "TSLA"], [3, 7, 0], [1, 3, 0]),
-  u("u_zoe", "zoe.memes", "zoe", "🐸", "#E9F7DF", "amc apologist. diamond hands, paper wallet.", ["AMC", "GME"], [2, 6, 1], [0, 2, 0]),
-  u("u_omar", "omarvalue", "omar", "📚", "#F3EBDD", "value investor. reading 10-ks for fun.", ["JPM", "KO", "COST"], [7, 3, 1], [2, 1, 0]),
-  u("u_ellie", "elliedca", "ellie", "🌙", "#ECE8F7", "dollar cost averaging my way to peace.", ["MSFT", "AAPL", "AMZN"], [5, 2, 0], [1, 0, 0]),
-  u("u_ravi", "ravisemis", "ravi", "🔬", "#E1F3F8", "fab tours > vacations. tsm and avgo.", ["TSM", "AVGO", "NVDA"], [8, 4, 0], [2, 1, 0], true),
+  u("u_alex", "alexrivers", "alex rivers", "🦈", "#DCEBFF", "semis maxi. if it has a gpu i'm long.", ["NVDA", "AMD", "PLTR"], true),
+  u("u_maya", "mayabuys", "maya", "🌸", "#FBE3EE", "apple since the ipod. quality > hype.", ["AAPL", "COST", "MSFT"]),
+  u("u_jordan", "jordanj", "jordan j", "🏀", "#FFF1CC", "fantasy football brain applied to stocks.", ["MSFT", "TSLA", "AMZN"]),
+  u("u_sam", "samtrades", "sam", "🎧", "#E3F6EA", "short attention span, long conviction.", ["COIN", "TSLA"]),
+  u("u_priya", "priyacharts", "priya", "📐", "#EAE6FF", "charts tell stories. i read them.", ["AMZN", "GOOGL", "MSFT"], true),
+  u("u_leo", "leolongterm", "leo", "🐢", "#E6F2EF", "buy, hold, touch grass.", ["GOOGL", "KO", "JPM"]),
+  u("u_nia", "niaonfire", "nia", "🔥", "#FFE2DC", "meta bull. reels are the new tv.", ["META", "NFLX"]),
+  u("u_kai", "kaiyolo", "kai", "🚀", "#E2F0FF", "here for the vibes and the volatility.", ["GME", "PLTR", "TSLA"]),
+  u("u_zoe", "zoe.memes", "zoe", "🐸", "#E9F7DF", "amc apologist. diamond hands, paper wallet.", ["AMC", "GME"]),
+  u("u_omar", "omarvalue", "omar", "📚", "#F3EBDD", "value investor. reading 10-ks for fun.", ["JPM", "KO", "COST"]),
+  u("u_ellie", "elliedca", "ellie", "🌙", "#ECE8F7", "dollar cost averaging my way to peace.", ["MSFT", "AAPL", "AMZN"]),
+  u("u_ravi", "ravisemis", "ravi", "🔬", "#E1F3F8", "fab tours > vacations. tsm and avgo.", ["TSM", "AVGO", "NVDA"], true),
 ];
+
+// ---------- session helpers (relative to now) ----------
+
+const LAST = lastCloseAtOrBefore(NOW);
+/** k trading sessions before the most recent close (back(0) = most recent close) */
+function back(k: number) { let s = LAST; for (let i = 0; i < k; i++) s = prevTradingDay(s); return s; }
+/** k trading sessions after the most recent close */
+function fwd(k: number) { let s = LAST; for (let i = 0; i < k; i++) s = nextTradingDay(s); return s; }
+const hoursAgo = (h: number) => new Date(NOW.getTime() - h * 3600e3).toISOString();
 
 // ---------- duels ----------
 
-const accAt = (session: string) => `${session}T15:00:00.000Z`; // 10am et
+const accAt = (session: string) => new Date(sessionCloseUtc(session).getTime() - 5 * 3600e3).toISOString(); // during the session
 
 function snap(ticker: string, session: string, kind: "start" | "end"): PriceSnapshot | null {
   const c = mockCloseSync(ticker, session);
   if (c == null) return null;
   return { ticker, kind, price: c, session, timestamp: sessionCloseUtc(session).toISOString(), source: "mock", simulated: true };
+}
+
+/** same split rule as the settlement service: start price on the ending share basis */
+function splitFactor(ticker: string, from: string, to: string) {
+  return MOCK_CORPORATE_ACTIONS.filter((c) => c.ticker === ticker && c.session > from && c.session <= to).reduce((f, c) => f * c.ratio, 1);
 }
 
 interface DuelSpec {
@@ -64,6 +85,7 @@ interface DuelSpec {
   sides: [string, string][]; // [userId, ticker]
   stake: number;
   acceptedSession?: string;
+  acceptedAt?: string;
   endSession: string;
   status: DuelStatus;
   label: string;
@@ -75,9 +97,9 @@ interface DuelSpec {
 }
 
 function makeDuel(s: DuelSpec): Duel {
-  const accepted = s.acceptedSession ? accAt(s.acceptedSession) : undefined;
+  const accepted = s.acceptedAt ?? (s.acceptedSession ? accAt(s.acceptedSession) : undefined);
   const deadline = sessionCloseUtc(s.endSession).toISOString();
-  const createdAt = s.createdAt ?? (s.acceptedSession ? `${prevTradingDay(s.acceptedSession)}T22:00:00.000Z` : "2026-11-24T18:00:00.000Z");
+  const createdAt = s.createdAt ?? (accepted ? new Date(new Date(accepted).getTime() - 20 * 3600e3).toISOString() : hoursAgo(3));
   const d: Duel = {
     id: s.id, createdBy: s.by, createdAt,
     participants: s.sides.map(([userId, ticker]) => ({
@@ -96,10 +118,10 @@ function makeDuel(s: DuelSpec): Duel {
 
   const lock = nextCloseAfter(new Date(accepted));
   d.lockAt = sessionCloseUtc(lock).toISOString();
-  const nowD = new Date(SEED_NOW);
-  if (new Date(d.lockAt) <= nowD) {
+  if (new Date(d.lockAt) <= NOW) {
     d.activatedAt = d.lockAt;
     d.startSnapshots = s.sides.map(([, t]) => snap(t, lock, "start")!).filter(Boolean);
+    if (d.status === "accepted") d.status = "active";
   }
   if (s.status === "completed" || s.status === "awaiting_verification") {
     const end = resolveEndSession(new Date(deadline), lock);
@@ -117,8 +139,12 @@ function makeDuel(s: DuelSpec): Duel {
       return d;
     }
     d.endSnapshots = ends as PriceSnapshot[];
+    d.startSnapshots = d.startSnapshots.map((sn) => {
+      const f = splitFactor(sn.ticker, lock, end);
+      return f === 1 ? sn : { ...sn, adjustedPrice: Math.round((sn.price / f) * 1e6) / 1e6 };
+    });
     const result = compareReturns(s.sides.map(([userId, ticker], i) => ({
-      userId, ticker, startPrice: d.startSnapshots[i].price, endPrice: d.endSnapshots[i].price,
+      userId, ticker, startPrice: d.startSnapshots[i].adjustedPrice ?? d.startSnapshots[i].price, endPrice: d.endSnapshots[i].price,
     })));
     const settledAt = new Date(new Date(deadline).getTime() + 15 * 60e3).toISOString();
     d.settlement = buildSettlement(d.id, result, { source: "mock", simulated: true, startSession: lock, endSession: end, settledAt });
@@ -126,32 +152,60 @@ function makeDuel(s: DuelSpec): Duel {
   return d;
 }
 
+// deterministic history so leaderboards, records and rivalries come from real duels
+function history(): Duel[] {
+  let seed = 7;
+  const rnd = () => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed / 2147483648; };
+  const players = ["u_alex", "u_maya", "u_jordan", "u_sam", "u_priya", "u_leo", "u_nia", "u_kai", "u_zoe", "u_omar", "u_ellie", "u_ravi"];
+  const tickers = ["NVDA", "AAPL", "TSLA", "MSFT", "AMZN", "GOOGL", "META", "AMD", "AVGO", "TSM", "NFLX", "PLTR", "COIN", "GME", "JPM", "KO", "COST", "DIS"];
+  const out: Duel[] = [];
+  for (let i = 0; i < 44; i++) {
+    const endIdx = 1 + Math.floor(Math.pow(rnd(), 1.5) * 55);
+    const len = [3, 4, 5, 5, 5, 10][Math.floor(rnd() * 6)];
+    const a = players[Math.floor(rnd() * players.length)];
+    let b = players[Math.floor(rnd() * players.length)];
+    if (b === a) b = players[(players.indexOf(a) + 1) % players.length];
+    const pa = i % 11 === 3 ? ME : a; // the demo account has some history too
+    const ta = tickers[Math.floor(rnd() * tickers.length)];
+    let tb = tickers[Math.floor(rnd() * tickers.length)];
+    if (tb === ta) tb = tickers[(tickers.indexOf(ta) + 3) % tickers.length];
+    out.push(makeDuel({
+      id: `h_${i}`, by: pa, sides: [[pa, ta], [b, tb]], stake: [5, 5, 10, 10, 20][Math.floor(rnd() * 5)],
+      acceptedSession: back(endIdx + len), endSession: back(endIdx), status: "completed",
+      label: len >= 10 ? "2 weeks" : len === 5 ? "1 week" : `${len} sessions`,
+    }));
+  }
+  return out;
+}
+
 export const seedDuels: Duel[] = [
-  // the three reference outcomes
+  // the three reference outcomes (scripted simulated prices, fixed dates)
   makeDuel({ id: "d_rise", by: "u_alex", sides: [["u_alex", "NVDA"], ["u_maya", "AAPL"]], stake: 10, acceptedSession: "2026-10-30", endSession: "2026-11-06", status: "completed", label: "1 week", title: "the classic: chips vs phones" }),
   makeDuel({ id: "d_fall", by: "u_sam", sides: [["u_sam", "TSLA"], ["u_nia", "META"]], stake: 15, acceptedSession: "2026-11-09", endSession: "2026-11-13", status: "completed", label: "until friday" }),
   makeDuel({ id: "d_draw", by: "u_priya", sides: [["u_priya", "MSFT"], ["u_leo", "GOOGL"]], stake: 10, acceptedSession: "2026-11-02", endSession: "2026-11-06", status: "completed", label: "until friday", title: "cloud wars" }),
-  // more history
-  makeDuel({ id: "d_c4", by: "u_maya", sides: [["u_maya", "AMD"], ["u_alex", "NVDA"]], stake: 10, acceptedSession: "2026-11-09", endSession: "2026-11-20", status: "completed", label: "2 weeks", title: "rematch" }),
-  makeDuel({ id: "d_c5", by: "u_alex", sides: [["u_alex", "NVDA"], [ME, "TSLA"]], stake: 5, acceptedSession: "2026-11-10", endSession: "2026-11-17", status: "completed", label: "1 week" }),
-  makeDuel({ id: "d_c6", by: ME, sides: [[ME, "META"], ["u_maya", "AAPL"]], stake: 10, acceptedSession: "2026-11-13", endSession: "2026-11-20", status: "completed", label: "1 week" }),
-  makeDuel({ id: "d_c7", by: "u_omar", sides: [["u_omar", "KO"], ["u_kai", "GME"]], stake: 5, acceptedSession: "2026-11-12", endSession: "2026-11-19", status: "completed", label: "1 week", title: "boring vs chaos" }),
-  makeDuel({ id: "d_group", by: "u_ravi", sides: [["u_ravi", "TSM"], ["u_alex", "NVDA"], ["u_maya", "AMD"], ["u_ellie", "AVGO"]], stake: 5, acceptedSession: "2026-11-02", endSession: "2026-11-20", status: "completed", label: "3 weeks", title: "semis showdown", communityId: "c_semis" }),
-  // paused
+  // paused: simulated trading halt (fixed date)
   makeDuel({ id: "d_halt", by: "u_kai", sides: [["u_kai", "SMCI"], ["u_ravi", "AMD"]], stake: 10, acceptedSession: "2026-11-16", endSession: "2026-11-20", status: "completed", label: "until friday" }),
+  // recent results
+  makeDuel({ id: "d_c4", by: "u_maya", sides: [["u_maya", "AMD"], ["u_alex", "NVDA"]], stake: 10, acceptedSession: back(13), endSession: back(8), status: "completed", label: "1 week", title: "rematch" }),
+  makeDuel({ id: "d_c5", by: "u_alex", sides: [["u_alex", "NVDA"], [ME, "TSLA"]], stake: 5, acceptedSession: back(10), endSession: back(5), status: "completed", label: "1 week" }),
+  makeDuel({ id: "d_c6", by: ME, sides: [[ME, "META"], ["u_maya", "AAPL"]], stake: 10, acceptedSession: back(7), endSession: back(2), status: "completed", label: "1 week" }),
+  makeDuel({ id: "d_c7", by: "u_omar", sides: [["u_omar", "KO"], ["u_kai", "GME"]], stake: 5, acceptedSession: back(9), endSession: back(4), status: "completed", label: "1 week", title: "boring vs chaos" }),
+  makeDuel({ id: "d_group", by: "u_ravi", sides: [["u_ravi", "TSM"], ["u_alex", "NVDA"], ["u_maya", "AMD"], ["u_ellie", "AVGO"]], stake: 5, acceptedSession: back(16), endSession: back(3), status: "completed", label: "3 weeks", title: "semis showdown", communityId: "c_semis" }),
   // live
-  makeDuel({ id: "d_live1", by: ME, sides: [[ME, "NVDA"], ["u_jordan", "MSFT"]], stake: 10, acceptedSession: "2026-11-23", endSession: "2026-11-27", status: "active", label: "until friday" }),
-  makeDuel({ id: "d_live2", by: "u_alex", sides: [["u_alex", "PLTR"], ["u_sam", "COIN"]], stake: 20, acceptedSession: "2026-11-20", endSession: "2026-12-04", status: "active", label: "2 weeks" }),
-  makeDuel({ id: "d_live3", by: "u_maya", sides: [["u_maya", "COST"], ["u_priya", "AMZN"]], stake: 10, acceptedSession: "2026-11-18", endSession: "2026-12-18", status: "active", label: "1 month", title: "shopping spree" }),
-  makeDuel({ id: "d_live4", by: "u_nia", sides: [["u_nia", "META"], ["u_leo", "GOOGL"]], stake: 10, acceptedSession: "2026-11-24", endSession: "2026-12-01", status: "active", label: "1 week", communityId: "c_tech", featured: true, title: "ads ads ads" }),
-  // waiting for the lock close
-  makeDuel({ id: "d_acc", by: "u_kai", sides: [["u_kai", "GME"], ["u_zoe", "AMC"]], stake: 5, acceptedSession: "2026-11-25", endSession: "2026-12-02", status: "accepted", label: "1 week", communityId: "c_meme", title: "meme civil war" }),
+  makeDuel({ id: "d_live1", by: ME, sides: [[ME, "NVDA"], ["u_jordan", "MSFT"]], stake: 10, acceptedSession: back(3), endSession: fwd(2), status: "active", label: "1 week" }),
+  makeDuel({ id: "d_live2", by: "u_alex", sides: [["u_alex", "PLTR"], ["u_sam", "COIN"]], stake: 20, acceptedSession: back(4), endSession: fwd(6), status: "active", label: "2 weeks" }),
+  makeDuel({ id: "d_live3", by: "u_maya", sides: [["u_maya", "COST"], ["u_priya", "AMZN"]], stake: 10, acceptedSession: back(6), endSession: fwd(15), status: "active", label: "1 month", title: "shopping spree" }),
+  makeDuel({ id: "d_live4", by: "u_nia", sides: [["u_nia", "META"], ["u_leo", "GOOGL"]], stake: 10, acceptedSession: back(1), endSession: fwd(4), status: "active", label: "1 week", communityId: "c_tech", featured: true, title: "ads ads ads" }),
+  // everyone accepted, waiting for the next close to lock prices
+  makeDuel({ id: "d_acc", by: "u_kai", sides: [["u_kai", "GME"], ["u_zoe", "AMC"]], stake: 5, acceptedAt: hoursAgo(1), endSession: fwd(6), status: "accepted", label: "1 week", communityId: "c_meme", title: "meme civil war" }),
   // invitations
-  makeDuel({ id: "d_inv", by: "u_jordan", sides: [["u_jordan", "TSLA"], [ME, "AAPL"]], stake: 10, endSession: "2026-12-04", status: "pending", label: "1 week", createdAt: "2026-11-25T14:10:00.000Z" }),
-  makeDuel({ id: "d_open", by: "u_ellie", sides: [["u_ellie", "AMZN"], ["", "GOOGL"]], stake: 5, endSession: "2026-12-04", status: "pending", label: "1 week", open: true, title: "open challenge: who takes googl?", createdAt: "2026-11-25T13:00:00.000Z" }),
+  makeDuel({ id: "d_inv", by: "u_jordan", sides: [["u_jordan", "TSLA"], [ME, "AAPL"]], stake: 10, endSession: fwd(5), status: "pending", label: "1 week", createdAt: hoursAgo(2.8) }),
+  makeDuel({ id: "d_inv2", by: "u_kai", sides: [["u_kai", "GME"], [ME, "MSFT"]], stake: 5, endSession: fwd(4), status: "pending", label: "1 week", title: "chaos vs calm", createdAt: hoursAgo(6) }),
+  makeDuel({ id: "d_open", by: "u_ellie", sides: [["u_ellie", "AMZN"], ["", "GOOGL"]], stake: 5, endSession: fwd(5), status: "pending", label: "1 week", open: true, title: "open challenge: who takes googl?", createdAt: hoursAgo(4) }),
   // closed out
-  makeDuel({ id: "d_cancel", by: "u_sam", sides: [["u_sam", "COIN"], ["u_omar", "JPM"]], stake: 10, endSession: "2026-11-20", status: "cancelled", label: "1 week", createdAt: "2026-11-12T13:00:00.000Z" }),
-  makeDuel({ id: "d_expired", by: "u_zoe", sides: [["u_zoe", "AMC"], ["u_ellie", "MSFT"]], stake: 5, endSession: "2026-11-20", status: "expired", label: "1 week", createdAt: "2026-11-10T13:00:00.000Z" }),
+  makeDuel({ id: "d_cancel", by: "u_sam", sides: [["u_sam", "COIN"], ["u_omar", "JPM"]], stake: 10, endSession: back(5), status: "cancelled", label: "1 week", createdAt: hoursAgo(24 * 12) }),
+  makeDuel({ id: "d_expired", by: "u_zoe", sides: [["u_zoe", "AMC"], ["u_ellie", "MSFT"]], stake: 5, endSession: back(6), status: "expired", label: "1 week", createdAt: hoursAgo(24 * 14) }),
+  ...history(),
 ];
 
 // ---------- communities ----------
@@ -209,6 +263,7 @@ export const seedPosts: Post[] = [
   tx("p21", "u_leo", 26, "long-term community: what's one stock you'd hold for 10 years without checking?", [], "c_long"),
   op("p22", "u_nia", 30, "META", "NFLX", "this month", "meta over nflx this month. ad market's hot.", "c_tech"),
   op("p23", "u_ellie", 34, "MSFT", "GOOGL", "1 month", "msft over googl over a month. copilot seats are real revenue."),
+  op("p25", ME, 26, "NVDA", "MSFT", "this week", "nvda over msft this week. put $10 on it vs @jordanj, let's see."),
   dp("p24", "u_omar", 40, "d_c7", "ko vs gme with @kaiyolo. boring vs chaos. results speak.", "result"),
 ];
 
@@ -287,7 +342,8 @@ const nt = (kind: Notification["kind"], h: number, text: string, href: string, a
 });
 
 export const seedNotifications: Notification[] = [
-  nt("duel_invite", 2.8, "challenged you: tsla vs aapl, $10 each, until next friday", "/duel/d_inv", "u_jordan"),
+  nt("duel_invite", 2.8, "challenged you: tsla vs aapl, $10 each, 1 week", "/duel/d_inv", "u_jordan"),
+  nt("duel_invite", 6, "challenged you: gme vs msft, $5 each, 1 week", "/duel/d_inv2", "u_kai"),
   nt("comment", 5, "commented on your duel: “msft is steady. nvda can't keep this up.”", "/duel/d_live1", "u_jordan"),
   nt("reaction", 6, "reacted 🔥 to your duel vs @jordanj", "/duel/d_live1", "u_nia"),
   nt("follow", 9, "started following you", "/u/ravisemis", "u_ravi"),

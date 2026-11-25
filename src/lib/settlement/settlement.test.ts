@@ -63,6 +63,22 @@ describe("compareReturns", () => {
     expect(r.winners).toEqual([B]);
   });
 
+  it("one up, one down: the gain wins", () => {
+    const r = compareReturns([
+      { userId: A, ticker: "NVDA", startPrice: 100, endPrice: 99 },
+      { userId: B, ticker: "AAPL", startPrice: 100, endPrice: 100.5 },
+    ]);
+    expect(r.winners).toEqual([B]);
+    expect(r.marginPct).toBeCloseTo(1.5, 6);
+  });
+
+  it("flat vs flat is a draw", () => {
+    expect(compareReturns([
+      { userId: A, ticker: "KO", startPrice: 60, endPrice: 60 },
+      { userId: B, ticker: "JPM", startPrice: 300, endPrice: 300 },
+    ]).status).toBe("draw");
+  });
+
   it("rejects identical stock selections", () => {
     expect(() => compareReturns([
       { userId: A, ticker: "NVDA", startPrice: 1, endPrice: 2 },
@@ -183,6 +199,31 @@ describe("settlement service", () => {
     // once data is back, settlement goes through
     const again = await settleDuel({ ...duelBase, status: "awaiting_verification" }, mock, repo, now);
     expect(again.outcome).toBe("settled");
+  });
+
+  it("pauses when the provider request fails (outage / timeout)", async () => {
+    const mock = new MockMarketProvider();
+    const down: MarketDataProvider = {
+      id: mock.id, label: mock.label, simulated: true,
+      search: mock.search.bind(mock), getAsset: mock.getAsset.bind(mock), getQuote: mock.getQuote.bind(mock),
+      getHistory: mock.getHistory.bind(mock), getCorporateActions: mock.getCorporateActions.bind(mock),
+      async getClose() { throw new Error("timeout"); },
+    };
+    const repo = new InMemorySettlementRepository();
+    const r = await settleDuel(duelBase, down, repo, now);
+    expect(r.outcome).toBe("needs_verification");
+    if (r.outcome === "needs_verification") expect(r.settlement.issues.join(" ")).toContain("price request failed");
+    expect(await repo.getSettlement(duelBase.id)).toBeNull(); // nothing recorded
+    const lock = await lockStartPrices(duelBase, down, new Date("2026-11-02T21:30:00Z"));
+    expect(lock.ok).toBe(false);
+  });
+
+  it("both stocks always share the same window", async () => {
+    const r = await settleDuel(duelBase, new MockMarketProvider(), new InMemorySettlementRepository(), now);
+    if (r.outcome !== "settled") throw new Error("expected settled");
+    expect(new Set(r.startSnapshots.map((x) => x.session)).size).toBe(1);
+    expect(new Set(r.endSnapshots.map((x) => x.session)).size).toBe(1);
+    expect(r.settlement.startSession).toBe(r.startSnapshots[0].session);
   });
 
   it("pauses on a trading halt (smci simulated halt)", async () => {

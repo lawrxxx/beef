@@ -68,16 +68,17 @@ export function userById(s: BeefState, id: string) {
   return s.users.find((u) => u.id === id);
 }
 
-export function activityCount(s: BeefState, userId: string) {
+export function activityCount(s: BeefState, userId: string, since = 0) {
+  const after = (iso: string) => new Date(iso).getTime() >= since;
   return (
-    s.posts.filter((p) => p.authorId === userId).length +
-    s.comments.filter((c) => c.authorId === userId).length +
-    s.daily.filter((d) => d.picks[userId]).length
+    s.posts.filter((p) => p.authorId === userId && after(p.createdAt)).length +
+    s.comments.filter((c) => c.authorId === userId && after(c.createdAt)).length +
+    s.daily.filter((d) => d.picks[userId] && after(d.session + "T21:00:00Z")).length
   );
 }
 
-export function statsFor(s: BeefState, userId: string) {
-  return computeStats(userId, s.duels, activityCount(s, userId), userById(s, userId));
+export function statsFor(s: BeefState, userId: string, since = 0) {
+  return computeStats(userId, s.duels, activityCount(s, userId, since), since);
 }
 
 export function useStats(userId: string | null | undefined) {

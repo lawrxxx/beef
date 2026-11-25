@@ -5,9 +5,9 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, type ReactNode } from "react";
 import { Bell, Compass, Home, Plus, Swords, Trophy, User, Wallet } from "lucide-react";
 import { cx } from "@/lib/format";
-import { useBeef } from "@/lib/store/store";
+import { useBeef, useStoreReady } from "@/lib/store/store";
 import { useMe } from "@/lib/hooks";
-import { Avatar, SimBadge } from "@/components/ui";
+import { Avatar, CardSkeleton, SimBadge, Skeleton } from "@/components/ui";
 import { InstallPrompt } from "@/components/install-prompt";
 import { RightRail } from "@/components/right-rail";
 
@@ -56,11 +56,12 @@ export function AppShell({ children }: { children: ReactNode }) {
   const me = useMe();
   const router = useRouter();
   const s = useBeef();
+  const ready = useStoreReady();
   const bare = path.startsWith("/auth") || path === "/onboarding" || path === "/offline";
   useEffect(() => {
     if (me && !s.session.onboarded && !bare) router.replace("/onboarding");
   }, [me, s.session.onboarded, bare, router]);
-  if (bare) return <main className="mx-auto min-h-dvh w-full max-w-md px-4 pt-safe">{children}</main>;
+  if (bare) return <main className="mx-auto min-h-dvh w-full max-w-md px-4 pt-safe">{ready ? children : <PageSkeleton />}</main>;
 
   return (
     <div className="mx-auto flex min-h-dvh w-full max-w-[1200px]">
@@ -104,9 +105,9 @@ export function AppShell({ children }: { children: ReactNode }) {
               <BellLink />
             </div>
           </header>
-          <main className="px-4 pb-28 pt-4 lg:pb-12 lg:pt-8">{children}</main>
+          <main className="px-4 pb-28 pt-4 lg:pb-12 lg:pt-8">{ready ? children : <PageSkeleton />}</main>
         </div>
-        <RightRail />
+        {ready && <RightRail />}
       </div>
 
       {/* mobile bottom nav */}
@@ -138,4 +139,16 @@ export function AppShell({ children }: { children: ReactNode }) {
 function UnreadPill() {
   const n = useUnread();
   return n ? <span className="ml-auto rounded-full bg-brand px-2 py-0.5 text-[11px] font-bold text-white">{n}</span> : null;
+}
+
+function PageSkeleton() {
+  return (
+    <div className="space-y-3" aria-busy="true" aria-label="loading">
+      <Skeleton className="h-7 w-40" />
+      <Skeleton className="h-4 w-56" />
+      <div className="pt-2" />
+      <CardSkeleton />
+      <CardSkeleton />
+    </div>
+  );
 }
