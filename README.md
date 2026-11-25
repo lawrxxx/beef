@@ -130,7 +130,7 @@ tests: `npm test` covers the brief's examples, both-rise / both-fall / identical
 
 1. push the repo to github and import it in vercel (framework: next.js, defaults are fine).
 2. add env vars from the table above (at minimum `NEXT_PUBLIC_APP_URL`; add supabase + `CRON_SECRET` for the backend).
-3. `vercel.json` schedules `/api/cron/settle` every 15 minutes (needs a pro plan; on hobby, change it to daily or call it from an external scheduler with the bearer token).
+3. `vercel.json` runs `/api/cron/settle` once a day after the us close (hobby plan limit). on pro, set it to `*/15 * * * *`, or call it from an external scheduler with the bearer token.
 4. add your custom domain in vercel → domains, then update `NEXT_PUBLIC_APP_URL` and the supabase redirect urls.
 
 the rate limiter in `src/lib/server/rate-limit.ts` is in-memory per instance; swap in redis/upstash for multi-instance production.
