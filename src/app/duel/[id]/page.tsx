@@ -19,6 +19,11 @@ import { Avatar, CardSkeleton, EmptyState, Pct, SimBadge, UserLink, useAction } 
 import { StatusPill, VersusBar } from "@/components/duel-card";
 import { Comments, ReactionBar } from "@/components/social";
 import { drawTrophyCard, shareCanvas, shareLink } from "@/components/share";
+import dynamic from "next/dynamic";
+import { cdpEnabled } from "@/components/wallet/cdp-provider";
+
+// wallet code (viem + cdp) only loads where it can be used: live mode with cdp configured
+const OnchainStake = dynamic(() => import("@/components/wallet/onchain-stake").then((m) => m.OnchainStake), { ssr: false });
 
 export default function DuelPage() {
   const { id } = useParams<{ id: string }>();
@@ -189,6 +194,8 @@ function DuelView({ d }: { d: Duel }) {
         )}
         {live && quoteError && <p className="text-sm text-loss">live prices are unavailable right now. the result isn't affected: it uses official closes.</p>}
       </div>
+
+      {cdpEnabled() && REMOTE && <OnchainStake d={d} meId={me?.id ?? null} />}
 
       {/* price table */}
       {(live || done || d.status === "awaiting_verification" || d.status === "pending" || d.status === "accepted") && (

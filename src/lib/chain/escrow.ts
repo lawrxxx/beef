@@ -3,10 +3,10 @@ import { uid } from "@/lib/format";
 import { REAL_MONEY_ENABLED } from "./config";
 
 /**
- * escrow abstraction. the app talks to this interface only. the simulated
- * implementation records ledger entries locally and never fabricates tx hashes or
- * confirmations. an onchain implementation would call BeefEscrow (see /contracts)
- * via viem and only report "confirmed" after a receipt with sufficient confirmations.
+ * practice-money ledger used by demo duels. it never fabricates tx hashes or
+ * confirmations. test-usdc stakes on base sepolia go through the embedded wallet
+ * flow instead (lib/wallet, /api/wallet/*, /api/paymaster), which only reports
+ * "confirmed" after verifying the mined receipt.
  */
 export interface EscrowService {
   readonly kind: "simulated" | "onchain";
@@ -27,18 +27,9 @@ export class SimulatedEscrow implements EscrowService {
 
 export function getEscrow(): EscrowService {
   if (REAL_MONEY_ENABLED) {
-    // intentionally not implemented: requires an audited, deployed contract, an oracle
-    // that can attest official closes, and regulatory sign-off.
-    throw new Error("onchain escrow is not available in this build");
+    throw new Error("real-money escrow is disabled");
   }
   return new SimulatedEscrow();
 }
 
-/** minimal abi for the reference escrow contract in /contracts/BeefEscrow.sol */
-export const BEEF_ESCROW_ABI = [
-  { type: "function", name: "createDuel", stateMutability: "nonpayable", inputs: [{ name: "duelId", type: "bytes32" }, { name: "stake", type: "uint256" }, { name: "participants", type: "address[]" }, { name: "termsHash", type: "bytes32" }], outputs: [] },
-  { type: "function", name: "deposit", stateMutability: "nonpayable", inputs: [{ name: "duelId", type: "bytes32" }], outputs: [] },
-  { type: "function", name: "settle", stateMutability: "nonpayable", inputs: [{ name: "duelId", type: "bytes32" }, { name: "winners", type: "address[]" }, { name: "settlementHash", type: "bytes32" }, { name: "oracleSig", type: "bytes" }], outputs: [] },
-  { type: "function", name: "refund", stateMutability: "nonpayable", inputs: [{ name: "duelId", type: "bytes32" }], outputs: [] },
-  { type: "event", name: "Settled", inputs: [{ name: "duelId", type: "bytes32", indexed: true }, { name: "settlementHash", type: "bytes32", indexed: false }] },
-] as const;
+// the real escrow abi is generated from contracts/BeefEscrow.sol: see lib/wallet/escrow-abi.ts

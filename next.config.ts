@@ -2,6 +2,14 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  // loaded with node's resolver at runtime instead of bundled (optional peer deps)
+  serverExternalPackages: ["@coinbase/cdp-sdk"],
+  webpack(config) {
+    // cdp-core lazily references optional integrations beef doesn't use (x402 payments,
+    // react-native storage). resolve them to empty modules instead of warning.
+    config.resolve.alias = { ...config.resolve.alias, "x402-fetch": false, "expo-secure-store": false, "expo-web-browser": false, "@react-native-async-storage/async-storage": false };
+    return config;
+  },
   async headers() {
     return [
       {

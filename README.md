@@ -106,7 +106,8 @@ the schema, seed, rls policies, triggers and rpcs were verified against postgres
 | market data | only the simulated provider has been exercised. the polygon / finnhub / alpha vantage adapters are written but untested without api keys |
 | `supabase/seed.sql` | generated from the time-relative seed, so its dates are fixed at generation time. rerun `npm run db:seed-sql` before seeding |
 | rate limiting | in-memory per server instance |
-| escrow contract | reference design only. not audited, not deployed. real money is disabled in code and in the schema |
+| escrow contract | compiled and tested on a local evm, **not deployed** (needs a funded base sepolia deployer). not audited. test usdc only; real money is disabled in code and in the schema |
+| embedded wallets | built and tested with the sdk's mock mode and unit tests. not yet exercised against a real cdp project (needs portal setup and keys) |
 
 ## market data
 
@@ -131,13 +132,63 @@ every price in the ui is labelled *simulated* when it comes from the mock provid
 
 the pure engine is `src/lib/settlement/engine.ts` (`pct-return-v1`). the service (`service.ts`) runs the 11 steps (deadline check → fetch → validate source → verify timestamps → adjust splits → compute → compare → decide → record-if-absent → status → notify), is idempotent (insert-if-absent; concurrent calls store exactly one result) and writes an audit log. the browser can only *ask* to settle: it never sends prices, and in supabase mode the server loads the duel from the database and checks that the caller is a participant.
 
-tests: `npm test` (27 tests) covers the brief's examples, both rise / both fall / one up one down / flat / identical, dollar gain vs percent, group ties, dst and holidays, missing data, provider outages, trading halts, split adjustment, the shared comparison window, idempotency and concurrent settlement.
+tests: `npm test` (79 tests). settlement: 27. wallets: 44 (calls, calldata decoding, every sponsorship rule, linking, intents, paymaster allow/refuse paths, receipt checks). escrow contract: 8, on a local evm with chain id 84532 (create/accept, exact approvals, bad creates, oracle-only payouts, replay, draws, group splits, refunds, and the server's oracle signature accepted onchain). wallet db: 3 more against real postgres when `WALLET_DB_TEST_*` env vars are set. the settlement suite covers the brief's examples, both rise / both fall / one up one down / flat / identical, dollar gain vs percent, group ties, dst and holidays, missing data, provider outages, trading halts, split adjustment, the shared comparison window, idempotency and concurrent settlement.
 
 end-to-end: `npm run e2e` (playwright, against a running server; set `BASE_URL` for a deployment) drives 45 checks on a phone viewport: the full create → accept → lock → settle loop, double-tap protection, accept/decline, group beefs, rematch prefill, comments, reactions, follows, trophy cards, notifications, every leaderboard period × category, wallet activity, profiles, communities, sign out / sign up / onboarding, and cross-device invite links. it also crawls every route for console errors and horizontal overflow, and checks the service worker and offline fallback.
 
-## base / onchain
+## wallets & sponsored gas (base sepolia only)
 
-`src/lib/chain/`: wagmi config for base + base sepolia (eip-6963 wallet discovery), usdc addresses, an `EscrowService` interface with a `SimulatedEscrow`, a configurable tokenized-stock provider registry where every capability (transferable, permissionless, dex liquidity, oracle feed) starts **unverified**, and `contracts/BeefEscrow.sol` as an **unaudited reference design** (usdc escrow, oracle-signed settlement, refunds). wallet connection on `/wallet` is read-only; nothing is ever signed. no transaction hashes or confirmations are invented: every ledger entry is labelled simulated.
+beef wallets are **coinbase developer platform (cdp) embedded wallets** with **smart accounts**. people sign in with an email code or google; no extension, no seed phrase. keys stay in cdp's secure enclave and are unlocked only by the user's sign-in, so wallets are user-controlled and beef can't move funds. everything onchain is **base sepolia (84532)** with **test usdc**. there is no mainnet chain object in the app, and the database refuses other chain ids.
+
+packages (pinned): `@coinbase/cdp-hooks@0.0.130`, `@coinbase/cdp-core@0.0.130` (browser), `@coinbase/cdp-sdk@1.61.0` (server, token verification only). wagmi and the old browser-extension connect were removed. dev: `solc`, `ganache`, `@openzeppelin/contracts` for compiling and testing the escrow.
+
+**how it fits together**
+1. **sign in** (`/wallet`): `useSignInWithEmail` / `useVerifyEmailOTP` / `useSignInWithOAuth("google")`, with `ethereum.createOnLogin: "smart"`. signing in again with the same method restores the same wallet on any device. users can link email or google as extra recovery methods (`useLinkEmail`, `useLinkGoogle`).
+2. **identity link**: the browser sends its cdp access token to `POST /api/wallet/link`. the server verifies it with `cdp.endUser.validateAccessToken`, takes the wallet addresses from cdp (never from the browser) and stores one row in `wallet_links`. the supabase user id, cdp user id and smart account address are each unique, so there are no duplicates. a returning user gets their existing link back.
+3. **transactions**: for a duel action, `POST /api/wallet/intent` builds the exact calls on the server (create: `approve(escrow, exact stake)` + `createDuel`; accept: `approve` + `deposit`; refund; payout: `settle` with a server-signed result) and records an intent. the browser sends exactly those calls with `useSendUserOperation({ network: "base-sepolia", paymasterUrl: "/api/paymaster", paymasterContext: { intentId }, idempotencyKey: intentId })` after an explicit confirmation of the amount and spender.
+4. **sponsorship** (`/api/paymaster`, erc-7677 proxy): cdp calls it server-to-server. the proxy forwards to the secret `CDP_PAYMASTER_URL` only if:
+   - the chain id is 84532 and the entrypoint is known
+   - the sender is a linked beef smart account
+   - the operation matches an unexpired intent for that wallet, hash for hash
+   - every call passes the policy:
+     - only test usdc and the beef escrow
+     - usdc only `approve(escrow, ≤ $25)`, and only when the same batch then calls the escrow (no dangling allowances)
+     - escrow only `createDuel` / `deposit` / `refund` / `settle`
+     - no eth value
+   - per-user and global daily limits aren't exceeded
+
+   every decision is logged in `sponsorship_logs`. a refusal returns an error, so an operation is never silently sent unsponsored.
+5. **confirmation**: `POST /api/wallet/confirm` fetches the receipt from base sepolia and checks that:
+   - the transaction succeeded
+   - it contains a `UserOperationEvent` for this op hash and sender, with `success = true` and a non-zero paymaster
+   - the escrow emitted the expected event for this duel
+
+   only then is the intent marked confirmed (idempotent).
+
+**cdp portal configuration** (portal.cdp.coinbase.com)
+1. create or select a project and copy the **project id** → `NEXT_PUBLIC_CDP_PROJECT_ID`.
+2. **embedded wallets → configuration**: add allowed origins `http://localhost:3000` and `https://beef-ecru.vercel.app` (and any custom domain). enable **email** and **google** sign-in.
+3. **api keys**: create a secret api key → `CDP_API_KEY_ID`, `CDP_API_KEY_SECRET` (server only). no wallet secret is needed; the server never signs for users.
+4. **paymaster**: select **base sepolia**, copy the endpoint → `CDP_PAYMASTER_URL` (server only). in the paymaster policy, allowlist the escrow contract and the usdc contract, restrict functions to `approve`, `createDuel`, `deposit`, `refund`, `settle`, and set per-user and global limits. this mirrors beef's own proxy policy, so both layers enforce it.
+5. deploy the escrow: `npm run contracts:build && DEPLOYER_PRIVATE_KEY=… SETTLEMENT_ORACLE_ADDRESS=… npm run contracts:deploy`. the deployer needs a little base sepolia eth. then set `NEXT_PUBLIC_ESCROW_ADDRESS` and `SETTLEMENT_ORACLE_PRIVATE_KEY`.
+6. supabase: run `supabase/migrations/20261127000000_wallets.sql`.
+7. test usdc for users: the circle faucet (faucet.circle.com, base sepolia). sponsored gas doesn't mean free usdc, and the ui says so.
+
+**local development**: set `NEXT_PUBLIC_CDP_MOCK=true` to use the sdk's mock mode: no project or network needed for the sign-in ui. the mock user has no smart account, so the app shows its "finish wallet setup" step, whose `createEvmSmartAccount` call the sdk doesn't mock. onchain staking needs live mode (`NEXT_PUBLIC_BACKEND=supabase`), so every participant has a verified wallet.
+
+**security properties**
+- no private keys or secrets in the browser: only the public project id. the api key, paymaster url and oracle key are server env only.
+- base sepolia is enforced everywhere: client network constant, server `assertBaseSepolia`, paymaster chain check, schema `check (chain_id = 84532)`, and a deploy script that refuses other chains.
+- no spend permissions (`enableSpendPermissions: false`); every financial action needs the user's explicit confirmation; approvals are for the exact stake and consumed in the same operation.
+- duplicate protection: intents are deduplicated per user, duel and action; confirmations are idempotent; `idempotencyKey` is passed to cdp; escrow deposits are one per participant.
+- rate limits on every wallet endpoint, plus audit logs for every sponsorship decision.
+
+**`contracts/BeefEscrow.sol`** (unaudited, base sepolia test use only):
+- creator-only `createDuel` and per-participant `deposit`
+- an oracle-signed `settle` bound to the chain id and contract address (no replay), executable once
+- draws refund everyone; tied winners split the pot
+- `refund` after a 2-day funding window
+- max stake $25, max 6 participants
 
 ## pwa
 

@@ -1,9 +1,7 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { WagmiProvider } from "wagmi";
-import { wagmiConfig } from "@/lib/chain/config";
+import { useEffect, type ReactNode } from "react";
+import { CdpProvider } from "@/components/wallet/cdp-provider";
 import { ToastProvider } from "@/components/ui";
 import { loadPersisted, tickDuels } from "@/lib/store/store";
 
@@ -26,15 +24,12 @@ function Boot() {
 }
 
 export function Providers({ children }: { children: ReactNode }) {
-  const [qc] = useState(() => new QueryClient());
   return (
-    <WagmiProvider config={wagmiConfig}>
-      <QueryClientProvider client={qc}>
-        <ToastProvider>
-          <Boot />
-          {children}
-        </ToastProvider>
-      </QueryClientProvider>
-    </WagmiProvider>
+    <CdpProvider>
+      <ToastProvider>
+        <Boot />
+        {children}
+      </ToastProvider>
+    </CdpProvider>
   );
 }

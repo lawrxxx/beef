@@ -1,14 +1,18 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo } from "react";
-import { useAccount, useChainId, useConnect, useDisconnect, useSwitchChain } from "wagmi";
-import { AlertTriangle, ExternalLink, Link2, ShieldOff, Wallet } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { ShieldOff, Wallet } from "lucide-react";
 import { practiceBalance, useBeef } from "@/lib/store/store";
 import { useMounted } from "@/lib/hooks";
-import { CHAIN, ESCROW_ADDRESS, REAL_MONEY_ENABLED, USDC } from "@/lib/chain/config";
-import { TOKENIZED_PROVIDERS } from "@/lib/chain/tokenized";
+import { CHAIN_ID, ESCROW_ADDRESS, USDC_ADDRESS, shortAddress } from "@/lib/chain/config";
 import { getEscrow } from "@/lib/chain/escrow";
+import dynamic from "next/dynamic";
+
+const WalletPanel = dynamic(() => import("@/components/wallet/wallet-panel").then((m) => m.WalletPanel), {
+  ssr: false,
+  loading: () => <div className="card p-4"><div className="skeleton h-5 w-40" /><div className="skeleton mt-3 h-10 w-full" /></div>,
+});
 import { cx, timeAgo, usd } from "@/lib/format";
 import { CardSkeleton, EmptyState, PageHeader, Section, SimBadge } from "@/components/ui";
 
@@ -16,11 +20,8 @@ export default function WalletPage() {
   const s = useBeef();
   const mounted = useMounted();
   const me = s.session.userId;
-  const { address, isConnected, connector } = useAccount();
-  const chainId = useChainId();
-  const { connectors, connect, isPending, error } = useConnect();
-  const { disconnect } = useDisconnect();
-  const { switchChain } = useSwitchChain();
+  const [cfg, setCfg] = useState<{ verification: boolean; sponsorship: boolean; liveMode: boolean } | null>(null);
+  useEffect(() => { fetch("/api/wallet/status").then((r) => r.json()).then(setCfg).catch(() => {}); }, []);
 
   const ledger = useMemo(() => {
     if (!me) return [];
@@ -44,7 +45,6 @@ export default function WalletPage() {
   if (!me) return <EmptyState icon={<Wallet size={22} />} title="sign in to see your wallet" action={<Link href="/auth/sign-in" className="btn-dark btn-sm">sign in</Link>} />;
   const balance = practiceBalance(s, me);
   const held = s.duels.filter((d) => d.participants.some((p) => p.userId === me && p.accepted) && ["pending", "accepted", "active", "awaiting_verification"].includes(d.status)).reduce((a, d) => a + d.stake, 0);
-  const wrongChain = isConnected && chainId !== CHAIN.id;
 
   return (
     <div>
@@ -56,42 +56,16 @@ export default function WalletPage() {
         <p className="mt-1 text-sm text-white/60">{usd(held, 0)} held in live duels · escrow: {getEscrow().kind}</p>
       </div>
 
-      <div className="mt-3 flex items-start gap-2 rounded-xl border border-gold/30 bg-gold-soft/60 p3 p-3 text-[13px] text-ink-soft">
+      <div className="mt-3 flex items-start gap-2 rounded-xl border border-gold/30 bg-gold-soft/60 p-3 text-[13px] text-ink-soft">
         <ShieldOff size={16} className="mt-0.5 shrink-0 text-gold" />
-        <p>real-money staking is <b>{REAL_MONEY_ENABLED ? "configured" : "off"}</b>. beef won't move real usdc until the market data source, oracle method, custody model and legal requirements are verified. every transaction below is simulated and has no onchain hash.</p>
+        <p>beef never moves real money. duels use practice money, and the optional wallet below only holds <b>test usdc on base sepolia</b>, which has no value.</p>
       </div>
 
-      <Section title="base wallet" className="mt-6">
-        <div className="card p-4">
-          {isConnected && address ? (
-            <>
-              <div className="flex items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="text-sm text-muted">connected with {connector?.name}</p>
-                  <p className="truncate font-mono text-sm">{address}</p>
-                </div>
-                <button className="btn-outline btn-sm" onClick={() => disconnect()}>disconnect</button>
-              </div>
-              <p className="mt-2 text-sm">network: <b>{chainId === 8453 ? "base" : chainId === 84532 ? "base sepolia" : `chain ${chainId}`}</b></p>
-              {wrongChain && <button className="btn-dark btn-sm mt-2" onClick={() => switchChain({ chainId: CHAIN.id })}>switch to {CHAIN.name}</button>}
-              <a href={`${CHAIN.blockExplorers?.default.url}/address/${address}`} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-1 text-sm text-brand-dark hover:underline">view on explorer <ExternalLink size={13} /></a>
-              <p className="mt-3 text-xs text-muted">connecting is read-only. beef never asks you to sign a transaction in this version.</p>
-            </>
-          ) : (
-            <>
-              <p className="text-[15px] text-ink-soft">link a wallet on base to get ready for onchain duels. optional, and nothing gets signed.</p>
-              <div className="mt-3 flex flex-wrap gap-2">
-                {connectors.map((c) => (
-                  <button key={c.uid} className="btn-outline btn-sm" disabled={isPending} onClick={() => connect({ connector: c, chainId: CHAIN.id })}><Link2 size={15} /> {c.name === "Injected" ? "browser wallet" : c.name}</button>
-                ))}
-              </div>
-              {error && <p className="mt-2 text-sm text-loss">{error.message.split("\n")[0]}</p>}
-            </>
-          )}
-        </div>
+      <Section title="your beef wallet" className="mt-6">
+        <WalletPanel />
       </Section>
 
-      <Section title="activity">
+      <Section title="practice money activity">
         <ul className="card divide-y">
           {ledger.map((r) => (
             <li key={r.id}>
@@ -104,24 +78,17 @@ export default function WalletPage() {
         </ul>
       </Section>
 
-      <Section title="onchain setup (for developers)">
+      <Section title="onchain setup">
         <div className="card divide-y text-sm">
           {[
-            ["network", CHAIN.name],
-            ["usdc", USDC[CHAIN.id]],
-            ["escrow contract", ESCROW_ADDRESS || "not deployed"],
-            ["oracle", "not configured (official-close attestation required)"],
+            ["network", `base sepolia (${CHAIN_ID}) only`],
+            ["test usdc", shortAddress(USDC_ADDRESS)],
+            ["escrow contract", ESCROW_ADDRESS ? shortAddress(ESCROW_ADDRESS) : "not deployed yet"],
+            ["wallet verification", cfg ? (cfg.verification ? "on" : "not configured") : "…"],
+            ["gas sponsorship", cfg ? (cfg.sponsorship ? "on (beef policy + cdp paymaster)" : "not configured") : "…"],
+            ["mode", cfg ? (cfg.liveMode ? "live (supabase)" : "demo") : "…"],
           ].map(([k, v]) => <div key={k} className="flex justify-between gap-3 px-4 py-2.5"><span className="text-muted">{k}</span><span className="truncate font-mono text-[12px]">{v}</span></div>)}
         </div>
-        {TOKENIZED_PROVIDERS.map((p) => (
-          <div key={p.id} className="card mt-2 p-4 text-sm">
-            <p className="font-semibold">{p.name}</p>
-            <div className="mt-2 grid grid-cols-2 gap-1 text-[13px]">
-              {Object.entries(p.capabilities).map(([k, v]) => <p key={k}><span className="text-muted">{k}:</span> <span className={v === "verified" ? "text-gain" : "text-gold"}>{v}</span></p>)}
-            </div>
-            <p className="mt-2 flex items-start gap-1.5 text-xs text-muted"><AlertTriangle size={13} className="mt-0.5 shrink-0" />tokenized stocks may be non-transferable, permissioned or illiquid. none are assumed to be supported until verified.</p>
-          </div>
-        ))}
       </Section>
     </div>
   );

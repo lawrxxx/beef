@@ -1,29 +1,40 @@
-import { http, createConfig, injected } from "wagmi";
-import { base, baseSepolia } from "wagmi/chains";
+import { getAddress, isAddress } from "viem";
+import { baseSepolia } from "viem/chains";
+import { entryPoint06Address, entryPoint07Address } from "viem/account-abstraction";
 
-export const CHAIN = process.env.NEXT_PUBLIC_CHAIN === "base" ? base : baseSepolia;
+// beef's onchain layer runs on base sepolia only. there is no mainnet chain object
+// anywhere in the app, and every transaction path asserts this chain id.
 
-/** usdc contract addresses (circle-issued native usdc) */
-export const USDC: Record<number, `0x${string}`> = {
-  [base.id]: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
-  [baseSepolia.id]: "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
-};
+export const CHAIN = baseSepolia;
+export const CHAIN_ID = 84532 as const;
+export const CHAIN_ID_HEX = "0x14a34" as const;
+/** cdp network identifier for user operations */
+export const CDP_NETWORK = "base-sepolia" as const;
+export const EXPLORER = "https://sepolia.basescan.org";
 
-export const ESCROW_ADDRESS = (process.env.NEXT_PUBLIC_ESCROW_ADDRESS || "") as `0x${string}` | "";
+/** circle test usdc on base sepolia (same address the cdp sdk uses for "base-sepolia") */
+export const USDC_ADDRESS = getAddress("0x036CbD53842c5426634e7929541eC2318f3dCF7e");
+export const USDC_DECIMALS = 6;
 
-/**
- * real-money staking stays off until legal, custody, asset-permission and oracle
- * reviews are complete. this flag alone is not sufficient – the escrow service also
- * refuses to run without a deployed, configured escrow contract.
- */
-export const REAL_MONEY_ENABLED = process.env.NEXT_PUBLIC_REAL_MONEY_ENABLED === "true" && !!ESCROW_ADDRESS;
+/** erc-4337 entrypoints. coinbase smart wallets (cdp smart accounts) use v0.6. */
+export const ENTRYPOINTS = [getAddress(entryPoint06Address), getAddress(entryPoint07Address)] as const;
 
-export const wagmiConfig = createConfig({
-  chains: [base, baseSepolia],
-  // eip-6963 discovery surfaces every installed wallet (coinbase wallet, metamask, rabby…).
-  // the wagmi/connectors barrel is avoided on purpose: it bundles optional sdks.
-  connectors: [injected()],
-  multiInjectedProviderDiscovery: true,
-  transports: { [base.id]: http(), [baseSepolia.id]: http() },
-  ssr: true,
-});
+const rawEscrow = process.env.NEXT_PUBLIC_ESCROW_ADDRESS ?? "";
+/** deployed BeefEscrow on base sepolia, or null until one is deployed and configured */
+export const ESCROW_ADDRESS: `0x${string}` | null = isAddress(rawEscrow) ? getAddress(rawEscrow) : null;
+
+/** hard off. there is no code path that moves real money. */
+export const REAL_MONEY_ENABLED = false as const;
+
+export class WrongChainError extends Error {
+  constructor(got: number | string) {
+    super(`beef only works on base sepolia (chain ${CHAIN_ID}). refusing chain ${got}.`);
+  }
+}
+
+export function assertBaseSepolia(chainId: number | string | bigint) {
+  const n = typeof chainId === "string" ? Number.parseInt(chainId, chainId.startsWith("0x") ? 16 : 10) : Number(chainId);
+  if (n !== CHAIN_ID) throw new WrongChainError(String(chainId));
+}
+
+export const shortAddress = (a?: string | null) => (a ? `${a.slice(0, 6)}…${a.slice(-4)}` : "");
