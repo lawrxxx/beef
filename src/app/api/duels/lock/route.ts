@@ -1,0 +1,21 @@
+import { NextResponse } from "next/server";
+import { getMarketProvider } from "@/lib/market";
+import { lockStartPrices } from "@/lib/settlement/service";
+import { getAdminSupabase } from "@/lib/supabase/server";
+import { saveSnapshots } from "@/lib/server/duel-db";
+import { resolveRequest } from "../_shared";
+
+export const dynamic = "force-dynamic";
+
+export async function POST(req: Request) {
+  const ctx = await resolveRequest(req, "lock");
+  if (!ctx.ok) return ctx.res;
+  if (ctx.duel.status !== "accepted") return NextResponse.json({ error: `duel is ${ctx.duel.status}` }, { status: 409 });
+  const r = await lockStartPrices(ctx.duel, getMarketProvider(), ctx.now);
+  if (r.ok && ctx.mode === "supabase") {
+    const db = getAdminSupabase()!;
+    await saveSnapshots(db, ctx.duel.id, r.snapshots);
+    await db.from("duels").update({ status: "active", activated_at: r.lockAt }).eq("id", ctx.duel.id).eq("status", "accepted");
+  }
+  return NextResponse.json(r);
+}

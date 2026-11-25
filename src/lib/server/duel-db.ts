@@ -1,0 +1,43 @@
+import "server-only";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { PriceSnapshot, Settlement } from "@/lib/types";
+import type { SettleableDuel } from "@/lib/settlement/service";
+
+/** loads a duel from postgres in the shape the settlement service needs */
+export async function loadSettleableDuel(db: SupabaseClient, duelId: string): Promise<SettleableDuel | null> {
+  const { data: d } = await db.from("duels").select("id,status,deadline").eq("id", duelId).maybeSingle();
+  if (!d) return null;
+  const { data: ps } = await db.from("duel_participants").select("user_id,ticker,accepted_at").eq("duel_id", duelId);
+  if (!ps?.length) return null;
+  const acceptedAt = ps.map((p: any) => p.accepted_at).filter(Boolean).sort().at(-1);
+  if (!acceptedAt) return null;
+  return {
+    id: d.id, status: d.status, deadline: new Date(d.deadline).toISOString(),
+    acceptedAt: new Date(acceptedAt).toISOString(),
+    participants: ps.map((p: any) => ({ userId: p.user_id, ticker: p.ticker })),
+  };
+}
+
+export async function saveSnapshots(db: SupabaseClient, duelId: string, snaps: PriceSnapshot[]) {
+  if (!snaps.length) return;
+  await db.from("duel_price_snapshots").upsert(
+    snaps.map((s) => ({
+      duel_id: duelId, ticker: s.ticker, kind: s.kind, price: s.price, adjusted_price: s.adjustedPrice ?? null,
+      session: s.session, price_timestamp: s.timestamp, source: s.source, simulated: s.simulated,
+    })),
+    { onConflict: "duel_id,ticker,kind", ignoreDuplicates: true },
+  );
+}
+
+export async function applySettlementStatus(db: SupabaseClient, s: Settlement) {
+  const status = s.status === "needs_verification" ? "awaiting_verification" : "completed";
+  // only move forward from active/awaiting; completed rows are immutable (trigger enforced)
+  await db.from("duels").update({ status }).eq("id", s.duelId).in("status", ["active", "awaiting_verification"]);
+  if (status === "completed") {
+    const users = s.entries.map((e) => e.userId);
+    await db.from("notifications").insert(users.map((u) => ({
+      user_id: u, kind: "duel_completed", text: s.status === "draw" ? "your duel ended in a draw" : s.winners.includes(u) ? "you won your duel" : "your duel is settled",
+      href: `/duel/${s.duelId}`,
+    })));
+  }
+}
