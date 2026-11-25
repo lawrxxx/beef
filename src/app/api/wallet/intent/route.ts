@@ -3,7 +3,7 @@ import { z } from "zod";
 import { prepareIntent } from "@/lib/server/wallet-service";
 import { appUserId, cachedVerifier, errorResponse, getWalletRepo, limited, loadDuelForChain } from "@/lib/server/wallet-deps";
 import { CDP_NETWORK } from "@/lib/chain/config";
-import { oracleConfigured, signSettlement } from "@/lib/server/oracle";
+import { oracleConfigured, signJoin, signSettlement } from "@/lib/server/oracle";
 
 export const dynamic = "force-dynamic";
 const Body = z.object({ accessToken: z.string().min(10).max(8192), action: z.enum(["create", "accept", "refund", "settle"]), duelId: z.string().uuid() });
@@ -17,7 +17,7 @@ export async function POST(req: Request) {
     const userId = await appUserId();
     const { intent, summary } = await prepareIntent(
       { accessToken: body.data.accessToken, action: body.data.action, duelId: body.data.duelId, appUserId: userId ?? undefined },
-      { verify: cachedVerifier(), repo: getWalletRepo(), loadDuel: loadDuelForChain, sign: oracleConfigured() ? signSettlement : undefined },
+      { verify: cachedVerifier(), repo: getWalletRepo(), loadDuel: loadDuelForChain, sign: oracleConfigured() ? signSettlement : undefined, signJoin: oracleConfigured() ? signJoin : undefined },
     );
     return NextResponse.json({ intentId: intent.id, calls: intent.calls, network: CDP_NETWORK, expiresAt: intent.expiresAt, summary });
   } catch (e) { return errorResponse(e); }

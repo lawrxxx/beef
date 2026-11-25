@@ -141,6 +141,8 @@ export interface Duel {
   startSnapshots: PriceSnapshot[];
   endSnapshots: PriceSnapshot[];
   settlement?: Settlement;
+  /** escrow state recorded from verified onchain events */
+  escrowState?: "unfunded" | "funded" | "active" | "settled" | "refunded";
   communityId?: string;
   featured?: boolean;
   title?: string;
@@ -155,7 +157,8 @@ export interface DuelTerms {
   priceRule: string;
   settlementRule: string;
   calculationVersion: string;
-  simulatedFunds: boolean;
+  /** stakes are test usdc on base sepolia, held by the beef escrow contract */
+  funding: "base_sepolia_usdc";
 }
 
 export interface User {
@@ -245,16 +248,4 @@ export interface DailyBeef {
   b: Ticker;
   /** userId -> pick */
   picks: Record<string, Ticker>;
-}
-
-export interface SimTransaction {
-  id: string;
-  userId: string;
-  kind: "stake_lock" | "payout" | "refund" | "faucet";
-  amount: number;
-  duelId?: string;
-  createdAt: string;
-  /** simulated until a real chain integration is enabled */
-  state: "simulated" | "pending" | "confirmed";
-  txHash?: string; // only for real confirmed chain transactions
 }

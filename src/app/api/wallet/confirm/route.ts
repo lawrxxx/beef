@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { confirmIntent } from "@/lib/server/wallet-service";
-import { cachedVerifier, errorResponse, getReceipt, getWalletRepo, limited } from "@/lib/server/wallet-deps";
+import { applyConfirmed, cachedVerifier, errorResponse, getReceipt, getWalletRepo, limited } from "@/lib/server/wallet-deps";
 
 export const dynamic = "force-dynamic";
 const hash = z.string().regex(/^0x[0-9a-fA-F]{64}$/);
@@ -13,7 +13,7 @@ export async function POST(req: Request) {
   const body = Body.safeParse(await req.json().catch(() => null));
   if (!body.success) return NextResponse.json({ error: "invalid request" }, { status: 400 });
   try {
-    const intent = await confirmIntent(body.data as any, { repo: getWalletRepo(), verify: cachedVerifier(), getReceipt });
+    const intent = await confirmIntent(body.data as any, { repo: getWalletRepo(), verify: cachedVerifier(), getReceipt, onConfirmed: applyConfirmed });
     return NextResponse.json({ status: intent.status, txHash: intent.txHash ?? null });
   } catch (e) { return errorResponse(e); }
 }

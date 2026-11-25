@@ -9,7 +9,7 @@ export interface SponsorshipPolicy {
   usdc: Address;
   escrow: Address;
   /** escrow functions users may call with sponsored gas */
-  escrowFunctions: readonly ("createDuel" | "deposit" | "refund" | "settle")[];
+  escrowFunctions: readonly ("createDuel" | "join" | "refund" | "settle")[];
   maxStakeUnits: bigint;
   perUserDailyLimit: number;
   globalDailyLimit: number;
@@ -19,7 +19,7 @@ export function defaultPolicy(usdc: Address, escrow: Address): SponsorshipPolicy
   return {
     usdc: getAddress(usdc),
     escrow: getAddress(escrow),
-    escrowFunctions: ["createDuel", "deposit", "refund", "settle"],
+    escrowFunctions: ["createDuel", "join", "refund", "settle"],
     maxStakeUnits: usdcUnits(MAX_STAKE_USDC),
     perUserDailyLimit: Number(process.env.SPONSOR_PER_USER_DAILY ?? 10),
     globalDailyLimit: Number(process.env.SPONSOR_GLOBAL_DAILY ?? 500),

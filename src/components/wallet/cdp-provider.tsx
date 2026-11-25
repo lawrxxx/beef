@@ -6,10 +6,27 @@ import { createContext, useContext, useEffect, useState, type ComponentType, typ
 export const CDP_PROJECT_ID = process.env.NEXT_PUBLIC_CDP_PROJECT_ID ?? "";
 /** the sdk's built-in mock mode, for local ui work without a cdp project */
 export const CDP_MOCK = process.env.NEXT_PUBLIC_CDP_MOCK === "true";
+/**
+ * how the wallet signs in:
+ * - "supabase" (recommended): cdp custom auth. cdp trusts the beef (supabase) session
+ *   token, so the wallet belongs to the beef account's user id. one login, no codes.
+ *   needs custom auth (jwks) configured in the cdp portal.
+ * - "cdp": cdp's own email code / google login, with the beef account's email.
+ */
+export const CDP_AUTH: "supabase" | "cdp" = process.env.NEXT_PUBLIC_CDP_AUTH === "supabase" ? "supabase" : "cdp";
 export const cdpEnabled = () => Boolean(CDP_PROJECT_ID) || CDP_MOCK;
+
+/** the current beef (supabase) access token, used as the cdp custom-auth jwt */
+async function getSupabaseJwt(): Promise<string | undefined> {
+  const { supabase } = await import("@/lib/store/store");
+  const sb = await supabase();
+  const { data } = await sb.auth.getSession();
+  return data.session?.access_token ?? undefined;
+}
 
 const CONFIG = {
   projectId: CDP_PROJECT_ID || "beef-mock-project",
+  ...(CDP_AUTH === "supabase" ? { customAuth: { getJwt: getSupabaseJwt } } : {}),
   useMock: CDP_MOCK,
   disableAnalytics: true,
   // every new user gets an embedded signer plus a smart account (no extension, no seed

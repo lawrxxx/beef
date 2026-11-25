@@ -1,7 +1,7 @@
 "use client";
 
 // supabase backend for the client store. reads map database rows into the same
-// shapes the demo store uses, so every screen works unchanged in both modes.
+// shapes the store uses.
 // writes go straight to postgres under row level security; anything cross-user
 // (notifications, acceptances, settlement) happens in rpcs, triggers or the server.
 
@@ -37,7 +37,7 @@ function mapDuel(r: any): Duel {
   const settlement = one(r.duel_settlements)?.payload as Settlement | undefined;
   const terms: DuelTerms = {
     methodology: r.methodology, provider: r.provider, marketTimezone: "America/New_York",
-    priceRule: r.price_rule, settlementRule: r.settlement_rule, calculationVersion: r.calculation_version, simulatedFunds: true,
+    priceRule: r.price_rule, settlementRule: r.settlement_rule, calculationVersion: r.calculation_version, funding: "base_sepolia_usdc",
   };
   // accept_duel doesn't compute market closes; derive the lock exactly like the server
   // does (first official close after the last acceptance)
@@ -54,7 +54,8 @@ function mapDuel(r: any): Duel {
     lockAt,
     activatedAt: r.activated_at ? new Date(r.activated_at).toISOString() : undefined,
     startSnapshots: snaps("start"), endSnapshots: snaps("end"),
-    settlement: settlement ?? (r.status === "awaiting_verification" ? undefined : undefined),
+    settlement: settlement ?? undefined,
+    escrowState: r.escrow_state ?? "unfunded",
     communityId: r.community_id ?? undefined, featured: r.featured, title: r.title ?? undefined, terms,
   };
 }
@@ -64,7 +65,7 @@ export interface RemoteSnapshot {
   follows: { followerId: string; followeeId: string }[]; communities: Community[];
   memberships: { communityId: string; userId: string }[]; notifications: Notification[];
   daily: DailyBeef[]; audit: Record<string, AuditLog[]>;
-  me: { id: string; email?: string; onboarded: boolean; adult: boolean } | null;
+  me: { id: string; email?: string; hasProfile: boolean; onboarded: boolean; adult: boolean } | null;
 }
 
 async function must<T>(p: PromiseLike<{ data: T | null; error: any }>): Promise<T> {
@@ -73,7 +74,7 @@ async function must<T>(p: PromiseLike<{ data: T | null; error: any }>): Promise<
   return (data ?? []) as T;
 }
 
-/** loads everything the app shows. sized for a demo: the latest few hundred rows. */
+/** loads everything the app shows. the latest few hundred rows. */
 export async function loadSnapshot(sb: SupabaseClient): Promise<RemoteSnapshot> {
   const { data: auth } = await sb.auth.getSession();
   const uid = auth.session?.user.id ?? null;
@@ -127,7 +128,7 @@ export async function loadSnapshot(sb: SupabaseClient): Promise<RemoteSnapshot> 
       picks: Object.fromEntries(picks.filter((p) => p.session === d.session).map((p) => [p.user_id, p.ticker])),
     })),
     audit: auditBy,
-    me: uid ? { id: uid, email: auth.session?.user.email ?? undefined, onboarded: !!meRow?.onboarded, adult: !!meRow?.is_adult } : null,
+    me: uid ? { id: uid, email: auth.session?.user.email ?? undefined, hasProfile: !!meRow, onboarded: !!meRow?.onboarded, adult: !!meRow?.is_adult } : null,
   };
 }
 
@@ -228,5 +229,20 @@ export const remote = {
     await ok(sb.from("duel_participants").insert(rest.map((p) => ({ duel_id: d.id, user_id: p.userId || null, ticker: p.ticker, accepted: false }))));
   },
 
-  rpc: (sb: SupabaseClient, fn: "accept_duel" | "decline_duel" | "cancel_duel", duelId: string) => ok(sb.rpc(fn, { p_duel: duelId })),
+  rpc: (sb: SupabaseClient, fn: "decline_duel" | "cancel_duel", duelId: string) => ok(sb.rpc(fn, { p_duel: duelId })),
+
+  usernameAvailable: async (sb: SupabaseClient, username: string): Promise<boolean> => {
+    const { data, error } = await sb.rpc("username_available", { p_username: username });
+    if (error) throw new Error(error.message.toLowerCase());
+    return data === true;
+  },
+
+  createProfile: (sb: SupabaseClient, p: { id: string; username: string; displayName: string; bio: string; avatar: string; avatarColor: string; referredBy: string | null }) => {
+    const isUrl = /^(https?:|data:)/.test(p.avatar);
+    return ok(sb.from("profiles").insert({
+      id: p.id, username: p.username, display_name: p.displayName, bio: p.bio,
+      avatar_url: isUrl ? p.avatar : null, avatar_emoji: isUrl ? null : p.avatar, avatar_color: p.avatarColor,
+      referred_by: p.referredBy,
+    })).catch((e: Error) => { throw new Error(/duplicate|unique/.test(e.message) ? "that username is taken" : e.message); });
+  },
 };

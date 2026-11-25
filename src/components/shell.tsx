@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, type ReactNode } from "react";
 import { Bell, Compass, Home, Plus, Swords, Trophy, User, Wallet } from "lucide-react";
 import { cx } from "@/lib/format";
-import { useBeef, useStoreReady } from "@/lib/store/store";
+import { CONFIGURED, useBeef, useStoreReady } from "@/lib/store/store";
 import { useMe } from "@/lib/hooks";
 import { Avatar, CardSkeleton, SimBadge, Skeleton } from "@/components/ui";
 import { InstallPrompt } from "@/components/install-prompt";
@@ -57,10 +57,12 @@ export function AppShell({ children }: { children: ReactNode }) {
   const router = useRouter();
   const s = useBeef();
   const ready = useStoreReady();
-  const bare = path.startsWith("/auth") || path === "/onboarding" || path === "/offline";
+  const bare = path.startsWith("/auth") || path === "/onboarding" || path === "/offline" || path === "/welcome";
+  const needsOnboarding = !!s.session.userId && (!s.session.hasProfile || !s.session.onboarded);
   useEffect(() => {
-    if (me && !s.session.onboarded && !bare) router.replace("/onboarding");
-  }, [me, s.session.onboarded, bare, router]);
+    if (ready && needsOnboarding && !bare) router.replace("/onboarding");
+  }, [ready, needsOnboarding, bare, router]);
+  if (!CONFIGURED) return <SetupRequired />;
   if (bare) return <main className="mx-auto min-h-dvh w-full max-w-md px-4 pt-safe">{ready ? children : <PageSkeleton />}</main>;
 
   return (
@@ -91,7 +93,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           ) : (
             <Link href="/auth/sign-in" className="btn-outline w-full">sign in</Link>
           )}
-          <div className="mt-3 px-2"><SimBadge label="demo · simulated money" /></div>
+          <div className="mt-3 px-2"><SimBadge label="base sepolia · testnet" /></div>
         </div>
       </aside>
 
@@ -150,5 +152,17 @@ function PageSkeleton() {
       <CardSkeleton />
       <CardSkeleton />
     </div>
+  );
+}
+
+/** the deployment has no database configured: say so, show nothing fake */
+function SetupRequired() {
+  return (
+    <main className="mx-auto flex min-h-dvh max-w-md flex-col justify-center px-6 text-center">
+      <div className="text-4xl">🥩</div>
+      <h1 className="mt-4 font-display text-2xl font-bold">beef isn't connected yet</h1>
+      <p className="mt-2 text-[15px] text-muted">this deployment has no database configured, so there's nothing to show. beef never fills in fake people or balances.</p>
+      <p className="mt-4 text-xs text-faint">admins: set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY (see the readme).</p>
+    </main>
   );
 }

@@ -1,4 +1,3 @@
-import Link from "next/link";
 
 export const metadata = { title: "how beef works" };
 
@@ -37,13 +36,12 @@ export default function RulesPage() {
             <p className="mt-1 text-muted">aapl wins. it lost less.</p>
           </div>
         </div>
-        <p className="mt-3 text-sm text-muted">see these in the demo: <Link className="underline" href="/duel/d_rise">both rise</Link> · <Link className="underline" href="/duel/d_fall">both fall</Link> · <Link className="underline" href="/duel/d_draw">identical returns</Link> · <Link className="underline" href="/duel/d_halt">paused for verification</Link></p>
       </section>
 
       <section className="card mt-4 p-5">
         <h2 className="text-lg font-bold">timing</h2>
         <ul className="mt-2 list-disc space-y-1.5 pl-5 text-[15px] text-ink-soft">
-          <li>both sides agree to the exact same terms. once everyone accepts, terms can't be edited.</li>
+          <li>both sides agree to the exact same terms. once everyone's in, terms can't be edited.</li>
           <li><b>starting prices</b> lock at the first official market close after the last acceptance. nobody can enter a duel knowing today's move.</li>
           <li><b>ending prices</b> are the official close on the deadline session.</li>
           <li>both stocks always use exactly the same window.</li>
@@ -69,7 +67,7 @@ export default function RulesPage() {
       <section id="risk" className="card mt-4 border-gold/40 p-5">
         <h2 className="text-lg font-bold">risk disclosure & eligibility</h2>
         <ul className="mt-2 list-disc space-y-1.5 pl-5 text-[15px] text-ink-soft">
-          <li>this version of beef uses <b>simulated market data</b> and <b>practice money</b>. prices are not live and no real funds move.</li>
+          <li>stakes are <b>test usdc on base sepolia</b>, a testnet token with no monetary value, held by the beef escrow contract. stock prices are <b>simulated</b> and not live. no real money moves.</li>
           <li>beef is entertainment, not investment advice. past results don't predict future returns.</li>
           <li>you must be 18 or older. real-money features, if ever offered, will only be available where they are legal and after identity and eligibility checks.</li>
           <li>real-money staking and tokenized stock transfers stay disabled until regulatory requirements, asset permissions, custody and oracle verification are confirmed.</li>

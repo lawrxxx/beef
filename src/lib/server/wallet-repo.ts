@@ -6,7 +6,7 @@ import type { Address, Hex } from "viem";
 // only the server writes these (service role in live mode); browsers can read their own.
 
 export interface WalletLink {
-  userId: string;          // beef user id (supabase auth uid, or "cdp:<id>" in demo mode)
+  userId: string;          // beef user id (supabase auth uid)
   cdpUserId: string;       // cdp end-user id
   eoa: Address | null;     // embedded signer (owner of the smart account)
   smartAccount: Address;   // the account that holds usdc and talks to the escrow

@@ -1,7 +1,7 @@
 import type { Duel, DuelStatus } from "@/lib/types";
 import type { BeefState } from "@/lib/store/store";
 import { isMarketOpen, nextTradingDay, sessionDateOf, sessionOpenUtc, isTradingDay } from "@/lib/market/calendar";
-import { dailyMatchup } from "@/data/seed";
+import { dailyMatchup } from "@/lib/daily";
 
 export const STATUS_LABEL: Record<DuelStatus, string> = {
   pending: "waiting for opponent",

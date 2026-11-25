@@ -5,7 +5,7 @@ import { SUPABASE_ANON_KEY, SUPABASE_URL, isSupabaseConfigured } from "./config"
 
 let client: SupabaseClient | null = null;
 
-/** browser client (anon key + rls). returns null in demo mode. */
+/** browser client (anon key + rls). returns null when supabase isn't configured. */
 export function getBrowserSupabase(): SupabaseClient | null {
   if (!isSupabaseConfigured()) return null;
   if (!client) client = createBrowserClient(SUPABASE_URL, SUPABASE_ANON_KEY);

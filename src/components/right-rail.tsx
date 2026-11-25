@@ -36,7 +36,10 @@ export function TrendingList({ limit = 6 }: { limit?: number }) {
 export function RightRail() {
   const s = useBeef();
   const me = s.session.userId;
-  const suggestions = s.users.filter((u) => u.id !== me && !s.follows.some((f) => f.followerId === me && f.followeeId === u.id)).slice(0, 3);
+  const suggestions = s.users
+    .filter((u) => u.id !== me && !s.follows.some((f) => f.followerId === me && f.followeeId === u.id))
+    .sort((a, b) => s.follows.filter((f) => f.followeeId === b.id).length - s.follows.filter((f) => f.followeeId === a.id).length)
+    .slice(0, 3);
   return (
     <aside className="sticky top-0 hidden h-dvh w-[320px] shrink-0 space-y-5 overflow-y-auto px-5 py-8 xl:block">
       <DailyBeefCard compact />
@@ -51,7 +54,7 @@ export function RightRail() {
         </div>
       )}
       <p className="px-1 text-xs leading-relaxed text-faint">
-        beef is a demo. prices are simulated and stakes use practice balances. nothing here is financial advice.{" "}
+        beef runs on base sepolia with test usdc, which has no monetary value. stock prices shown are simulated. nothing here is financial advice.{" "}
         <Link href="/rules" className="underline">how beef works</Link>
       </p>
     </aside>

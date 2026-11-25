@@ -46,13 +46,16 @@ export function buildCreateDuelCalls(p: { usdc: Address; escrow: Address; duelId
   ];
 }
 
-/** opponent: approve exactly the stake, then deposit it */
-export function buildAcceptCalls(p: { usdc: Address; escrow: Address; duelId: string; stake: number }): Call[] {
+/** opponent: approve exactly the stake, then take their slot with the oracle's authorisation */
+export function buildJoinCalls(p: { usdc: Address; escrow: Address; duelId: string; stake: number; joinSig: Hex }): Call[] {
   return [
     approve(p.usdc, p.escrow, usdcUnits(p.stake)),
-    { to: p.escrow, value: 0n, data: encodeFunctionData({ abi: BEEF_ESCROW_ABI, functionName: "deposit", args: [duelIdToBytes32(p.duelId)] }) },
+    { to: p.escrow, value: 0n, data: encodeFunctionData({ abi: BEEF_ESCROW_ABI, functionName: "join", args: [duelIdToBytes32(p.duelId), p.joinSig] }) },
   ];
 }
+
+/** zero address marks an open slot (filled later with `join`) */
+export const OPEN_SLOT = "0x0000000000000000000000000000000000000000" as Address;
 
 export function buildRefundCalls(p: { escrow: Address; duelId: string }): Call[] {
   return [{ to: p.escrow, value: 0n, data: encodeFunctionData({ abi: BEEF_ESCROW_ABI, functionName: "refund", args: [duelIdToBytes32(p.duelId)] }) }];

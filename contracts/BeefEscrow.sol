@@ -36,6 +36,7 @@ contract BeefEscrow {
 
     event Created(bytes32 indexed duelId, address indexed creator, uint256 stake, bytes32 termsHash);
     event Deposited(bytes32 indexed duelId, address indexed who);
+    event Joined(bytes32 indexed duelId, address indexed who);
     event Activated(bytes32 indexed duelId);
     event Settled(bytes32 indexed duelId, address[] winners, bytes32 settlementHash);
     event Refunded(bytes32 indexed duelId);
@@ -52,6 +53,8 @@ contract BeefEscrow {
     }
 
     /// creator registers the duel and pays their stake in the same call.
+    /// participants may contain address(0) for open slots (an invitee or a public
+    /// challenger whose wallet isn't known yet). open slots are filled with `join`.
     function createDuel(bytes32 duelId, uint256 stake, address[] calldata participants, bytes32 termsHash) external {
         Duel storage d = duels[duelId];
         if (d.status != Status.None) revert BadState();
@@ -61,7 +64,7 @@ contract BeefEscrow {
         bool creatorIn;
         for (uint256 i; i < n; i++) {
             address p = participants[i];
-            if (p == address(0)) revert BadParams();
+            if (p == address(0)) continue; // open slot
             for (uint256 j = i + 1; j < n; j++) if (participants[j] == p) revert BadParams();
             if (p == msg.sender) creatorIn = true;
         }
@@ -79,6 +82,24 @@ contract BeefEscrow {
     function deposit(bytes32 duelId) external {
         Duel storage d = duels[duelId];
         if (d.status != Status.Funding || block.timestamp > d.fundingDeadline) revert BadState();
+        _deposit(duelId, d);
+    }
+
+    /// fills an open slot and deposits. the beef oracle authorises which wallet may
+    /// take a slot (the invited friend, or whoever accepted a public challenge), so a
+    /// stranger can't grab a seat.
+    function join(bytes32 duelId, bytes calldata oracleSig) external {
+        Duel storage d = duels[duelId];
+        if (d.status != Status.Funding || block.timestamp > d.fundingDeadline) revert BadState();
+        if (_isParticipant(d, msg.sender)) revert BadState();
+        bytes32 digest = MessageHashUtils.toEthSignedMessageHash(joinDigest(duelId, msg.sender));
+        if (ECDSA.recover(digest, oracleSig) != oracle) revert BadSignature();
+        uint256 n = d.participants.length;
+        uint256 i;
+        while (i < n && d.participants[i] != address(0)) i++;
+        if (i == n) revert BadState(); // no open slot left
+        d.participants[i] = msg.sender;
+        emit Joined(duelId, msg.sender);
         _deposit(duelId, d);
     }
 
@@ -129,6 +150,11 @@ contract BeefEscrow {
     /// the message the oracle signs. bound to this chain and this contract (no replay).
     function settlementDigest(bytes32 duelId, bytes32 termsHash, address[] calldata winners, bytes32 settlementHash) public view returns (bytes32) {
         return keccak256(abi.encode(block.chainid, address(this), duelId, termsHash, winners, settlementHash));
+    }
+
+    /// the message the oracle signs to let `who` take an open slot in `duelId`
+    function joinDigest(bytes32 duelId, address who) public view returns (bytes32) {
+        return keccak256(abi.encode("beef.join", block.chainid, address(this), duelId, who));
     }
 
     function getDuel(bytes32 duelId) external view returns (

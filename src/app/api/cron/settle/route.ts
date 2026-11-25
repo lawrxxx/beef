@@ -17,7 +17,7 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
   const db = getAdminSupabase();
-  if (!db) return NextResponse.json({ mode: "demo", message: "no database configured; demo clients settle via /api/duels/settle" });
+  if (!db) return NextResponse.json({ error: "no database configured" }, { status: 503 });
 
   const now = new Date();
   const provider = getMarketProvider();

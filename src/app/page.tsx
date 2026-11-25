@@ -7,7 +7,9 @@ import { useBeef } from "@/lib/store/store";
 import { useMe, userById } from "@/lib/hooks";
 import { canAccept, isParticipant, trendingTickers } from "@/lib/derive";
 import { usd } from "@/lib/format";
-import { dailyMatchup } from "@/data/seed";
+import { dailyMatchup } from "@/lib/daily";
+import { Welcome } from "@/components/welcome";
+import { shareLink } from "@/components/share";
 import { Avatar, EmptyState, Section, SimBadge, Tabs } from "@/components/ui";
 import { Composer } from "@/components/composer";
 import { PostCard, UserRow } from "@/components/social";
@@ -68,7 +70,15 @@ export default function HomePage() {
     return list;
   }, [s.posts, tab, following, me?.id]);
 
-  const suggestions = s.users.filter((u) => u.id !== me?.id && !following.has(u.id)).slice(0, 3);
+  // real people only: ranked by followers and recent posts, excluding who you follow
+  const suggestions = useMemo(() => {
+    const weekAgo = Date.now() - 7 * 864e5;
+    const score = (id: string) => s.follows.filter((f) => f.followeeId === id).length * 2 + s.posts.filter((p) => p.authorId === id && Date.parse(p.createdAt) > weekAgo).length;
+    return s.users.filter((u) => u.id !== me?.id && !following.has(u.id)).sort((a, b) => score(b.id) - score(a.id)).slice(0, 3);
+  }, [s.users, s.follows, s.posts, me?.id, following]);
+  const invite = () => me && shareLink(`/?ref=${me.username}`, `i'm on beef: friendly stock duels with friends. join me and let's settle an argument.`);
+
+  if (!me) return <Welcome />;
 
   return (
     <div>
@@ -116,9 +126,9 @@ export default function HomePage() {
       {tab === "foryou" && <div className="mb-4"><Composer /></div>}
 
       {posts.length === 0 ? (
-        <EmptyState icon={<Users size={22} />} title={tab === "following" ? "your following feed is quiet" : "nothing here yet"}
-          body={tab === "following" ? "follow a few people to fill it up." : "be the first to post a take."}
-          action={<Link href="/discover" className="btn-dark btn-sm">find people</Link>} />
+        <EmptyState icon={<Users size={22} />} title="your feed is looking quiet."
+          body="find friends or invite someone to start your first beef."
+          action={<div className="flex gap-2"><Link href="/discover" className="btn-dark btn-sm">find friends</Link><button className="btn-outline btn-sm" onClick={invite}>invite someone</button></div>} />
       ) : (
         <div className="space-y-3">
           {posts.slice(0, limit).map((p, i) => (
@@ -129,6 +139,12 @@ export default function HomePage() {
                 <div className="xl:hidden">
                   <div className="mb-2 flex items-center justify-between"><h2 className="section-title">trending stocks</h2><SimBadge /></div>
                   <TrendingStrip />
+                </div>
+              )}
+              {tab === "foryou" && i === 2 && following.size < 3 && (
+                <div className="card flex items-center gap-3 p-4">
+                  <div className="min-w-0 flex-1"><p className="font-semibold">beef is better with friends</p><p className="text-[13px] text-muted">send your invite link. it brings them straight to beef.</p></div>
+                  <button className="btn-dark btn-sm shrink-0" onClick={invite}>invite</button>
                 </div>
               )}
               {tab === "foryou" && i === 4 && suggestions.length > 0 && (
@@ -147,7 +163,7 @@ export default function HomePage() {
           )}
         </div>
       )}
-      <Link href="/rules" className="mt-4 flex items-center justify-center gap-1 text-xs text-muted">how beef works · simulated prices & practice money <ArrowRight size={12} /></Link>
+      <Link href="/rules" className="mt-4 flex items-center justify-center gap-1 text-xs text-muted">how beef works · test usdc on base sepolia, simulated prices <ArrowRight size={12} /></Link>
     </div>
   );
 }

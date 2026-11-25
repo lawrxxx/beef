@@ -1,14 +1,20 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  useCurrentUser, useGetAccessToken, useIsInitialized, useIsSignedIn, useSendUserOperation,
+  useAuthenticateWithJWT, useCurrentUser, useGetAccessToken, useIsInitialized, useIsSignedIn, useSendUserOperation,
 } from "@coinbase/cdp-hooks";
 import { createPublicClient, erc20Abi, formatUnits, http, type Address, type Hex } from "viem";
-import { CDP_NETWORK, CHAIN, USDC_ADDRESS, USDC_DECIMALS, assertBaseSepolia, CHAIN_ID } from "@/lib/chain/config";
-import { deserializeCalls } from "@/lib/wallet/calls";
+import { CDP_NETWORK, CHAIN, CHAIN_ID, ESCROW_ADDRESS, RPC_URL, USDC_ADDRESS, USDC_DECIMALS, assertBaseSepolia } from "@/lib/chain/config";
+import { deserializeCalls, duelIdToBytes32, usdcUnits } from "@/lib/wallet/calls";
+import { BEEF_ESCROW_ABI } from "@/lib/wallet/escrow-abi";
+import { useBeef } from "@/lib/store/store";
+import { CDP_AUTH } from "./cdp-provider";
 
-const publicClient = createPublicClient({ chain: CHAIN, transport: http() });
+// one place for everything the ui needs from the wallet. every balance here is read
+// from base sepolia: the usdc contract for the wallet, the escrow contract for stakes.
+
+export const publicClient = createPublicClient({ chain: CHAIN, transport: http(RPC_URL) });
 
 export type LinkState = { status: "idle" | "linking" | "linked" | "error"; message?: string };
 export interface ActivityItem {
@@ -26,8 +32,6 @@ export function friendlyWalletError(e: unknown): Error {
   if (/user (rejected|cancel)/i.test(m)) return new Error("cancelled. nothing was sent.");
   return e instanceof Error ? e : new Error(m || "something went wrong");
 }
-
-/** wraps a wallet action so its error is friendly */
 export const friendly = <T,>(fn: () => Promise<T>) => async () => { try { return await fn(); } catch (e) { throw friendlyWalletError(e); } };
 
 async function api<T>(url: string, body: unknown): Promise<T> {
@@ -37,35 +41,63 @@ async function api<T>(url: string, body: unknown): Promise<T> {
   return j as T;
 }
 
-/** everything the beef ui needs from the embedded wallet, in one place */
+export const fmtUsdc = (units: bigint | null | undefined) => (units == null ? null : Number(formatUnits(units, USDC_DECIMALS)));
+
 export function useBeefWallet() {
+  const s = useBeef();
   const { isInitialized } = useIsInitialized();
   const { isSignedIn } = useIsSignedIn();
   const { currentUser } = useCurrentUser();
   const { getAccessToken } = useGetAccessToken();
+  const { authenticateWithJWT } = useAuthenticateWithJWT();
   const userOp = useSendUserOperation();
 
   const smartAccount = (currentUser?.evmSmartAccountObjects?.[0]?.address ?? currentUser?.evmSmartAccounts?.[0] ?? null) as Address | null;
   const eoa = (currentUser?.evmAccountObjects?.[0]?.address ?? currentUser?.evmAccounts?.[0] ?? null) as Address | null;
 
-  const [usdc, setUsdc] = useState<{ value: bigint | null; loading: boolean; error: string | null }>({ value: null, loading: false, error: null });
+  const [wallet, setWallet] = useState<{ units: bigint | null; loading: boolean; error: string | null; at: number | null }>({ units: null, loading: false, error: null, at: null });
+  const [locked, setLocked] = useState<bigint | null>(null);
   const [link, setLink] = useState<LinkState>({ status: "idle" });
   const [activity, setActivity] = useState<ActivityItem[]>([]);
 
+  // duels the signed-in person is in, whose stakes might sit in escrow
+  const myEscrowDuels = useMemo(() => s.duels.filter((d) => d.participants.some((p) => p.userId === s.session.userId)
+    && ["funded", "active"].includes(d.escrowState ?? "")), [s.duels, s.session.userId]);
+
+  /** usdc in the smart account + stakes the escrow holds for it, both read onchain */
   const refreshBalance = useCallback(async () => {
-    if (!smartAccount) return;
-    setUsdc((u) => ({ ...u, loading: true }));
+    if (!smartAccount) return null;
+    setWallet((w) => ({ ...w, loading: true }));
     try {
-      const value = await publicClient.readContract({ address: USDC_ADDRESS, abi: erc20Abi, functionName: "balanceOf", args: [smartAccount] });
-      setUsdc({ value, loading: false, error: null });
+      const units = await publicClient.readContract({ address: USDC_ADDRESS, abi: erc20Abi, functionName: "balanceOf", args: [smartAccount] });
+      setWallet({ units, loading: false, error: null, at: Date.now() });
+      if (ESCROW_ADDRESS && myEscrowDuels.length) {
+        const res = await publicClient.multicall({
+          contracts: myEscrowDuels.map((d) => ({ address: ESCROW_ADDRESS!, abi: BEEF_ESCROW_ABI, functionName: "deposited" as const, args: [duelIdToBytes32(d.id), smartAccount] as const })),
+          allowFailure: true,
+        });
+        const states = await publicClient.multicall({
+          contracts: myEscrowDuels.map((d) => ({ address: ESCROW_ADDRESS!, abi: BEEF_ESCROW_ABI, functionName: "getDuel" as const, args: [duelIdToBytes32(d.id)] as const })),
+          allowFailure: true,
+        });
+        let sum = 0n;
+        myEscrowDuels.forEach((d, i) => {
+          const dep = res[i]?.status === "success" && res[i].result === true;
+          const st = states[i]?.status === "success" ? Number((states[i].result as readonly unknown[])[5]) : 0;
+          if (dep && (st === 1 || st === 2)) sum += usdcUnits(d.stake); // funding or active
+        });
+        setLocked(sum);
+      } else setLocked(0n);
+      return units;
     } catch {
-      setUsdc((u) => ({ ...u, loading: false, error: "couldn't load your balance from base sepolia" }));
+      setWallet((w) => ({ ...w, loading: false, error: "couldn't read your balance from base sepolia. try refresh." }));
+      return null;
     }
-  }, [smartAccount]);
+  }, [smartAccount, myEscrowDuels]);
 
   const token = useCallback(async () => {
     const t = await getAccessToken();
-    if (!t) throw new Error("your wallet session ended. sign in again.");
+    if (!t) throw new Error("your wallet session ended. connect it again.");
     return t;
   }, [getAccessToken]);
 
@@ -73,30 +105,37 @@ export function useBeefWallet() {
     try {
       const r = await api<{ linked: boolean; items: ActivityItem[] }>("/api/wallet/activity", { accessToken: await token() });
       setActivity(r.items);
-    } catch { /* shown via link state */ }
+    } catch { /* link state shows problems */ }
   }, [token]);
 
-  // link (or re-confirm) the wallet with the beef account once per session
+  /** supabase custom-auth mode: one tap, the beef session is the wallet login */
+  const connectWithBeefAccount = useCallback(async () => {
+    await friendly(() => authenticateWithJWT())();
+  }, [authenticateWithJWT]);
+
+  // verify + link the wallet to the beef account once per session (idempotent server side)
   const linked = useRef<string | null>(null);
+  const relink = useCallback(async () => {
+    if (!smartAccount) return;
+    setLink({ status: "linking" });
+    try {
+      await api("/api/wallet/link", { accessToken: await token() });
+      setLink({ status: "linked" });
+      void refreshActivity();
+    } catch (e) {
+      setLink({ status: "error", message: e instanceof Error ? e.message : "couldn't link your wallet" });
+    }
+  }, [smartAccount, token, refreshActivity]);
   useEffect(() => {
-    if (!isSignedIn || !smartAccount || linked.current === smartAccount) return;
+    if (!isSignedIn || !smartAccount || !s.session.userId || linked.current === smartAccount) return;
     linked.current = smartAccount;
-    (async () => {
-      setLink({ status: "linking" });
-      try {
-        await api("/api/wallet/link", { accessToken: await token() });
-        setLink({ status: "linked" });
-        void refreshActivity();
-      } catch (e) {
-        setLink({ status: "error", message: e instanceof Error ? e.message : "couldn't link your wallet" });
-      }
-    })();
-  }, [isSignedIn, smartAccount, token, refreshActivity]);
+    void relink();
+  }, [isSignedIn, smartAccount, s.session.userId, relink]);
 
   useEffect(() => {
     void refreshBalance();
     if (!smartAccount) return;
-    const id = setInterval(refreshBalance, 20_000);
+    const id = setInterval(refreshBalance, 30_000);
     return () => clearInterval(id);
   }, [smartAccount, refreshBalance]);
 
@@ -121,7 +160,7 @@ export function useBeefWallet() {
       paymasterContext: { intentId: prepared.intentId },
       idempotencyKey: prepared.intentId, // a double tap can't submit twice
     }))();
-    return { intentId: prepared.intentId, userOperationHash, accessToken };
+    return { intentId: prepared.intentId, userOperationHash };
   }, [smartAccount, token, userOp]);
 
   const confirm = useCallback(async (p: { intentId: string; userOpHash: Hex; txHash: Hex }) => {
@@ -131,15 +170,39 @@ export function useBeefWallet() {
     return r.status;
   }, [token, refreshActivity, refreshBalance]);
 
-  const committedUnits = activity
-    .filter((a) => a.status === "confirmed" && (a.action === "create" || a.action === "accept"))
-    .reduce((s, a) => s + BigInt(a.amountUnits), 0n);
+  const available = fmtUsdc(wallet.units);
+  const lockedUsdc = fmtUsdc(locked) ?? 0;
 
   return {
-    isInitialized, isSignedIn, user: currentUser, smartAccount, eoa, link,
-    usdc: { ...usdc, formatted: usdc.value == null ? null : Number(formatUnits(usdc.value, USDC_DECIMALS)) },
-    committedUsdc: Number(formatUnits(committedUnits, USDC_DECIMALS)),
+    authMode: CDP_AUTH, isInitialized, isSignedIn, user: currentUser, smartAccount, eoa, link, relink,
+    connectWithBeefAccount,
+    balance: { available, locked: lockedUsdc, total: available == null ? null : available + lockedUsdc, loading: wallet.loading, error: wallet.error, at: wallet.at, units: wallet.units },
     activity, refreshActivity, refreshBalance, runDuelAction, confirm,
     userOp: { status: userOp.status, data: userOp.data, error: userOp.error },
   };
+}
+
+/**
+ * after someone opens the faucet: poll the onchain balance until it goes up (or give
+ * up after a few minutes). never claims tokens arrived until the chain says so.
+ */
+export function useFundingWatch(refresh: () => Promise<bigint | null>, current: bigint | null) {
+  const [state, setState] = useState<"idle" | "waiting" | "arrived" | "timeout">("idle");
+  const base = useRef<bigint | null>(null);
+  const start = useCallback(() => { base.current = current ?? 0n; setState("waiting"); }, [current]);
+  useEffect(() => {
+    if (state !== "waiting") return;
+    let n = 0;
+    const tick = async () => {
+      n++;
+      const v = await refresh();
+      if (v != null && base.current != null && v > base.current) setState("arrived");
+      else if (n >= 36) setState("timeout"); // ~3 minutes
+    };
+    const id = setInterval(tick, 5000);
+    const onFocus = () => void tick(); // coming back from the faucet tab
+    window.addEventListener("focus", onFocus);
+    return () => { clearInterval(id); window.removeEventListener("focus", onFocus); };
+  }, [state, refresh]);
+  return { state, start, reset: () => setState("idle") };
 }

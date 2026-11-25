@@ -145,6 +145,25 @@ export const BEEF_ESCROW_ABI = [
         "internalType": "bytes32",
         "name": "duelId",
         "type": "bytes32"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "who",
+        "type": "address"
+      }
+    ],
+    "name": "Joined",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "duelId",
+        "type": "bytes32"
       }
     ],
     "name": "Refunded",
@@ -318,6 +337,48 @@ export const BEEF_ESCROW_ABI = [
         "internalType": "enum BeefEscrow.Status",
         "name": "status",
         "type": "uint8"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "duelId",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "bytes",
+        "name": "oracleSig",
+        "type": "bytes"
+      }
+    ],
+    "name": "join",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "duelId",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "address",
+        "name": "who",
+        "type": "address"
+      }
+    ],
+    "name": "joinDigest",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
       }
     ],
     "stateMutability": "view",

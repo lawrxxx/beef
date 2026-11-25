@@ -8,6 +8,11 @@ import { loadPersisted, tickDuels } from "@/lib/store/store";
 function Boot() {
   useEffect(() => {
     loadPersisted();
+    // referral links: /?ref=username (or any page). remembered until sign-up; not a secret.
+    try {
+      const ref = new URL(window.location.href).searchParams.get("ref");
+      if (ref && /^[a-z0-9._]{3,20}$/.test(ref)) localStorage.setItem("beef:ref", ref);
+    } catch { /* storage unavailable */ }
     tickDuels();
     const id = setInterval(tickDuels, 30_000);
 

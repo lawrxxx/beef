@@ -1,99 +1,140 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
-import { ArrowLeft } from "lucide-react";
-import { completeOnboarding, updateProfile, useBeef } from "@/lib/store/store";
-import { useMe, useMounted } from "@/lib/hooks";
+import { useEffect, useRef, useState } from "react";
+import { ArrowLeft, Camera, CheckCircle2, Loader2, XCircle } from "lucide-react";
+import { USERNAME_RE, completeOnboarding, createProfile, signOut, useBeef, usernameAvailable } from "@/lib/store/store";
 import { cx } from "@/lib/format";
-import { CardSkeleton, useAction } from "@/components/ui";
-import { ProfileFields, type ProfileDraft } from "@/components/profile-form";
-import { UserRow } from "@/components/social";
+import { Avatar, CardSkeleton, useAction } from "@/components/ui";
 import { Logo } from "@/components/shell";
+import { AVATAR_COLORS, AVATAR_EMOJIS } from "@/components/profile-form";
+import { uploadAvatar } from "@/components/avatar-upload";
+import type { User } from "@/lib/types";
 
-const STEPS = ["name", "look", "stocks", "people", "confirm"] as const;
-const COUNTRIES = ["united states", "united kingdom", "canada", "australia", "nigeria", "india", "germany", "other"];
+const WalletStep = dynamic(() => import("@/components/wallet/onboarding-wallet").then((m) => m.WalletStep), { ssr: false, loading: () => <CardSkeleton /> });
+const FundStep = dynamic(() => import("@/components/wallet/onboarding-wallet").then((m) => m.FundStep), { ssr: false, loading: () => <CardSkeleton /> });
+const DoneStep = dynamic(() => import("@/components/wallet/onboarding-wallet").then((m) => m.DoneStep), { ssr: false, loading: () => <CardSkeleton /> });
+
+type Step = "profile" | "wallet" | "fund" | "done";
+const ORDER: Step[] = ["profile", "wallet", "fund", "done"];
+const COPY: Record<Step, [string, string]> = {
+  profile: ["make your profile", "this is how friends find and challenge you."],
+  wallet: ["create your wallet", "a base sepolia wallet for test usdc. it's created for you, nothing to install."],
+  fund: ["fund your beef wallet", "duels are staked in test usdc. it's free from circle's faucet and has no monetary value."],
+  done: ["you're in", "here's where you stand."],
+};
+
+function ProfileStep({ onDone }: { onDone: () => void }) {
+  const s = useBeef();
+  const run = useAction();
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [username, setUsername] = useState("");
+  const [displayName, setDisplayName] = useState("");
+  const [bio, setBio] = useState("");
+  const [avatar, setAvatar] = useState("🙂");
+  const [color, setColor] = useState(AVATAR_COLORS[0]);
+  const [check, setCheck] = useState<"idle" | "checking" | "free" | "taken" | "invalid">("idle");
+  const [busy, setBusy] = useState(false);
+
+  // live availability check (debounced). nothing is generated for the person.
+  useEffect(() => {
+    const un = username.trim().toLowerCase();
+    if (!un) { setCheck("idle"); return; }
+    if (!USERNAME_RE.test(un)) { setCheck("invalid"); return; }
+    setCheck("checking");
+    const t = setTimeout(async () => { try { setCheck((await usernameAvailable(un)) ? "free" : "taken"); } catch { setCheck("idle"); } }, 350);
+    return () => clearTimeout(t);
+  }, [username]);
+
+  const preview = { id: s.session.userId ?? "me", avatar, avatarColor: color } as User;
+  return (
+    <form className="space-y-5" onSubmit={async (e) => {
+      e.preventDefault(); setBusy(true);
+      const ref = (() => { try { return localStorage.getItem("beef:ref"); } catch { return null; } })();
+      const referredBy = ref ? s.users.find((u) => u.username === ref)?.id ?? null : null;
+      const ok = await run(async () => { await createProfile({ username, displayName, bio, avatar, avatarColor: color, referredBy }); return true; }, "profile created");
+      setBusy(false);
+      if (ok) onDone();
+    }}>
+      <div>
+        <label className="label" htmlFor="username">username</label>
+        <div className="relative">
+          <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted">@</span>
+          <input id="username" className="input !pl-8 !pr-10" value={username} maxLength={20} autoCapitalize="none" autoCorrect="off" autoComplete="off" onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9._]/g, ""))} placeholder="pick one" />
+          <span className="absolute right-3 top-1/2 -translate-y-1/2">
+            {check === "checking" && <Loader2 size={16} className="animate-spin text-muted" />}
+            {check === "free" && <CheckCircle2 size={16} className="text-gain" />}
+            {(check === "taken" || check === "invalid") && <XCircle size={16} className="text-loss" />}
+          </span>
+        </div>
+        <p className={cx("mt-1 text-xs", check === "taken" ? "text-loss" : check === "free" ? "text-gain" : "text-muted")} role="status">
+          {check === "taken" ? "that username is taken" : check === "free" ? "available" : check === "invalid" ? "3–20 characters: letters, numbers, dots, underscores" : "3–20 characters: letters, numbers, dots, underscores"}
+        </p>
+      </div>
+      <div>
+        <label className="label" htmlFor="dn">display name</label>
+        <input id="dn" className="input" value={displayName} maxLength={30} onChange={(e) => setDisplayName(e.target.value)} placeholder="what friends call you" />
+      </div>
+      <div>
+        <p className="label">profile photo <span className="font-normal text-muted">(optional)</span></p>
+        <div className="flex items-center gap-4">
+          <Avatar user={preview} size={64} />
+          <button type="button" className="btn-outline btn-sm" onClick={() => fileRef.current?.click()}><Camera size={15} /> upload photo</button>
+          <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={async (e) => {
+            const f = e.target.files?.[0];
+            if (!f) return;
+            const url = await run(() => uploadAvatar(f, s.session.userId ?? "me"));
+            if (url) setAvatar(url);
+          }} />
+        </div>
+        <div className="mt-3 flex flex-wrap gap-1.5">{AVATAR_EMOJIS.map((x) => <button type="button" key={x} onClick={() => setAvatar(x)} className={cx("flex h-9 w-9 items-center justify-center rounded-full text-lg", avatar === x ? "ring-2 ring-ink" : "bg-black/[.04]")} aria-label={`avatar ${x}`}>{x}</button>)}</div>
+        <div className="mt-2 flex gap-1.5">{AVATAR_COLORS.map((c) => <button type="button" key={c} onClick={() => setColor(c)} className={cx("h-7 w-7 rounded-full border", color === c && "ring-2 ring-ink ring-offset-2")} style={{ background: c }} aria-label={`colour ${c}`} />)}</div>
+      </div>
+      <div>
+        <label className="label" htmlFor="bio">bio <span className="font-normal text-muted">(optional)</span></label>
+        <textarea id="bio" className="input min-h-[72px] resize-none" value={bio} maxLength={160} onChange={(e) => setBio(e.target.value)} placeholder="what's your investing style?" />
+      </div>
+      <button className="btn-primary w-full" disabled={busy || check !== "free" || !displayName.trim()}>{busy ? "saving…" : "continue"}</button>
+    </form>
+  );
+}
 
 export default function OnboardingPage() {
   const s = useBeef();
-  const me = useMe();
-  const mounted = useMounted();
   const router = useRouter();
-  const run = useAction();
-  const [step, setStep] = useState(0);
-  const [draft, setDraft] = useState<ProfileDraft | null>(null);
-  const [adult, setAdult] = useState(false);
-  const [country, setCountry] = useState("");
+  const [step, setStep] = useState<Step | null>(null);
 
+  // resume where the person left off
   useEffect(() => {
-    if (me && !draft) {
-      const fromEmail = (s.session.email ?? "").split("@")[0].toLowerCase().replace(/[^a-z0-9._]/g, "").slice(0, 20);
-      setDraft({ username: fromEmail.length >= 3 ? fromEmail : me.username, displayName: me.displayName, bio: me.bio, avatar: me.avatar, avatarColor: me.avatarColor, favoriteStocks: me.favoriteStocks });
-    }
-  }, [me, draft, s.session.email]);
+    if (!s.session.userId) { router.replace("/auth/sign-up"); return; }
+    if (step) return;
+    if (!s.session.hasProfile) setStep("profile");
+    else if (s.session.onboarded) router.replace("/");
+    else setStep("wallet");
+  }, [s.session.userId, s.session.hasProfile, s.session.onboarded, step, router]);
 
-  if (!mounted) return <CardSkeleton />;
-  if (!me) { router.replace("/auth/sign-up"); return null; }
-  if (!draft) return <CardSkeleton />;
-
-  const suggested = s.users.filter((u) => u.id !== me.id).sort((a, b) => b.favoriteStocks.filter((t) => draft.favoriteStocks.includes(t)).length - a.favoriteStocks.filter((t) => draft.favoriteStocks.includes(t)).length).slice(0, 6);
-
-  const next = async () => {
-    if (step === 0) {
-      const ok = await run(() => { updateProfile({ username: draft.username, displayName: draft.displayName.trim() || draft.username }); return true; });
-      if (!ok) return;
-    }
-    if (step === 1 || step === 2) await run(() => updateProfile({ avatar: draft.avatar, avatarColor: draft.avatarColor, bio: draft.bio, favoriteStocks: draft.favoriteStocks }));
-    if (step === STEPS.length - 1) {
-      completeOnboarding(country);
-      router.push("/");
-      return;
-    }
-    setStep(step + 1);
-  };
+  if (!step) return <CardSkeleton />;
+  const idx = ORDER.indexOf(step);
+  const finish = async () => { await completeOnboarding(); router.push("/"); };
 
   return (
     <div className="flex min-h-dvh flex-col py-6">
       <div className="flex items-center justify-between">
-        {step > 0 ? <button className="btn-ghost btn-sm -ml-2 !px-2" onClick={() => setStep(step - 1)} aria-label="back"><ArrowLeft size={20} /></button> : <Logo size={24} />}
-        <button className="text-sm text-muted underline" onClick={() => { completeOnboarding(); router.push("/"); }} hidden={step === STEPS.length - 1}>skip</button>
+        {idx > 1 ? <button className="btn-ghost btn-sm -ml-2 !px-2" onClick={() => setStep(ORDER[idx - 1])} aria-label="back"><ArrowLeft size={20} /></button> : <Logo size={24} />}
+        <button className="text-sm text-muted underline" onClick={() => void signOut().then(() => router.push("/"))}>sign out</button>
       </div>
-      <div className="mt-4 flex gap-1" aria-hidden>{STEPS.map((_, i) => <div key={i} className={cx("h-1 flex-1 rounded-full", i <= step ? "bg-ink" : "bg-black/10")} />)}</div>
-      <h1 className="mt-6 font-display text-[26px] font-bold leading-tight tracking-tight">
-        {["what should we call you?", "pick your look", "which stocks do you love?", "follow a few people", "one last thing"][step]}
-      </h1>
-      <p className="mt-1 text-[15px] text-muted">
-        {["this is how friends find and challenge you.", "upload a photo or pick an emoji. add a bio if you like.", "we'll use these to suggest duels and people.", "your feed fills up with their takes and duels.", "beef is for adults. confirm to finish."][step]}
-      </p>
-
+      <div className="mt-4 flex gap-1" aria-hidden>{[0, 1, 2, 3, 4].map((i) => <div key={i} className={cx("h-1 flex-1 rounded-full", i <= idx + 1 ? "bg-ink" : "bg-black/10")} />)}</div>
+      <p className="mt-6 text-xs font-semibold text-muted">step {idx + 2} of 5</p>
+      <h1 className="font-display text-[26px] font-bold leading-tight tracking-tight">{COPY[step][0]}</h1>
+      <p className="mt-1 text-[15px] text-muted">{COPY[step][1]}</p>
       <div className="mt-6 animate-fade-up" key={step}>
-        {step === 0 && <ProfileFields draft={draft} setDraft={setDraft} userId={me.id} fields={["username", "displayName"]} />}
-        {step === 1 && <ProfileFields draft={draft} setDraft={setDraft} userId={me.id} fields={["avatar", "bio"]} />}
-        {step === 2 && <ProfileFields draft={draft} setDraft={setDraft} userId={me.id} fields={["stocks"]} />}
-        {step === 3 && <div className="card px-4 py-1">{suggested.map((u) => <UserRow key={u.id} userId={u.id} sub={`likes ${u.favoriteStocks.slice(0, 3).join(", ")}`} />)}</div>}
-        {step === 4 && (
-          <div className="space-y-4">
-            <div>
-              <label className="label" htmlFor="country">where do you live?</label>
-              <select id="country" className="input" value={country} onChange={(e) => setCountry(e.target.value)}>
-                <option value="">choose…</option>
-                {COUNTRIES.map((c) => <option key={c}>{c}</option>)}
-              </select>
-              <p className="mt-1 text-xs text-muted">used to decide which features can be offered to you. this version only uses practice money, available everywhere.</p>
-            </div>
-            <label className="card flex items-start gap-3 p-4 text-sm text-ink-soft">
-              <input type="checkbox" className="mt-0.5 h-5 w-5 accent-[#1D1D1F]" checked={adult} onChange={(e) => setAdult(e.target.checked)} />
-              <span>i'm 18 or older. i understand beef uses simulated prices and practice money, and that it's entertainment, not financial advice.</span>
-            </label>
-          </div>
-        )}
+        {step === "profile" && <ProfileStep onDone={() => setStep("wallet")} />}
+        {step === "wallet" && <WalletStep onDone={() => setStep("fund")} />}
+        {step === "fund" && <FundStep onDone={() => setStep("done")} />}
+        {step === "done" && <DoneStep onFinish={() => void finish()} />}
       </div>
-
-      <div className="mt-auto pt-8">
-        <button className="btn-primary w-full" onClick={next} disabled={(step === 0 && draft.username.length < 3) || (step === 4 && (!adult || !country))}>
-          {step === STEPS.length - 1 ? "let's beef" : "continue"}
-        </button>
-      </div>
+      {step === "wallet" && <button className="mt-4 text-center text-sm text-muted underline" onClick={() => setStep("done")}>set up my wallet later</button>}
     </div>
   );
 }

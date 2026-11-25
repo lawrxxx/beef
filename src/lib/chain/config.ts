@@ -10,7 +10,13 @@ export const CHAIN_ID = 84532 as const;
 export const CHAIN_ID_HEX = "0x14a34" as const;
 /** cdp network identifier for user operations */
 export const CDP_NETWORK = "base-sepolia" as const;
-export const EXPLORER = "https://sepolia.basescan.org";
+export const NETWORK_NAME = "base sepolia";
+export const RPC_URL = "https://sepolia.base.org";
+/** base sepolia block explorer */
+export const EXPLORER = "https://sepolia-explorer.base.org";
+export const FAUCET_URL = "https://faucet.circle.com/";
+export const txUrl = (hash: string) => `${EXPLORER}/tx/${hash}`;
+export const addressUrl = (a: string) => `${EXPLORER}/address/${a}`;
 
 /** circle test usdc on base sepolia (same address the cdp sdk uses for "base-sepolia") */
 export const USDC_ADDRESS = getAddress("0x036CbD53842c5426634e7929541eC2318f3dCF7e");

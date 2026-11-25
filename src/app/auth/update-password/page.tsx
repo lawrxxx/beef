@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { getBrowserSupabase } from "@/lib/supabase/client";
+import { supabase } from "@/lib/store/store";
 import { AuthFrame } from "@/components/auth-ui";
 import { useAction } from "@/components/ui";
 
@@ -11,7 +11,6 @@ export default function UpdatePasswordPage() {
   const run = useAction();
   const [pw, setPw] = useState("");
   const [pw2, setPw2] = useState("");
-  const sb = getBrowserSupabase();
   return (
     <AuthFrame title="choose a new password">
       <form className="space-y-3" onSubmit={async (e) => {
@@ -19,7 +18,7 @@ export default function UpdatePasswordPage() {
         const ok = await run(async () => {
           if (pw.length < 8) throw new Error("use at least 8 characters");
           if (pw !== pw2) throw new Error("passwords don't match");
-          if (!sb) throw new Error("demo mode: password reset needs supabase configured");
+          const sb = await supabase();
           const { error } = await sb.auth.updateUser({ password: pw });
           if (error) throw new Error(error.message.toLowerCase());
           return true;

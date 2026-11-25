@@ -4,17 +4,21 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useMemo, useRef, useState } from "react";
 import { ArrowLeft, Check, Copy, Globe, Info, Lock, Search, Share2, Users, X } from "lucide-react";
+import dynamic from "next/dynamic";
 import type { Duel, User } from "@/lib/types";
 import { getAsset } from "@/lib/market/assets";
 import { deadlineOptions, nextCloseAfter, sessionCloseUtc } from "@/lib/market/calendar";
 import {
-  MAX_STAKE, REMOTE, STAKE_OPTIONS, createDuel, inviteLink, practiceBalance, simulateOpponentAccept, useBeef,
+  MAX_STAKE, STAKE_OPTIONS, createDuel, inviteLink, useBeef,
 } from "@/lib/store/store";
 import { rivalsOf, useMe } from "@/lib/hooks";
 import { cx, marketTime, usd } from "@/lib/format";
 import { Avatar, EmptyState, SimBadge, useAction } from "@/components/ui";
 import { StockPicker } from "@/components/stock-picker";
 import { absoluteUrl, shareLink, toast } from "@/components/share";
+
+// wallet code (viem + cdp) only loads for the funding step
+const FundCard = dynamic(() => import("@/components/wallet/duel-funding").then((m) => m.DuelFunding), { ssr: false });
 
 const STEPS = [
   { key: "who", title: "who are you beefing with?" },
@@ -61,7 +65,6 @@ function NewDuelInner() {
   const options = useMemo(() => deadlineOptions(new Date()), []);
   const deadline = options.find((o) => o.id === deadlineId) ?? options[0];
   const lockSession = useMemo(() => nextCloseAfter(new Date()), []);
-  const balance = me ? practiceBalance(s, me.id) : 0;
 
   const friends = useMemo(() => {
     if (!me) return [] as User[];
@@ -93,7 +96,7 @@ function NewDuelInner() {
     mode === "open" ? null : mode === "group" ? (opponents.length < 2 ? "pick at least two friends for a group beef" : null) : opponents.length !== 1 ? "pick someone to challenge, or make it an open challenge" : null,
     picked.some((t) => !t) ? `pick ${slots} different stocks` : new Set(picked).size !== picked.length ? "each side needs a different stock" : null,
     !mine || !picked.includes(mine) ? "pick the stock you're backing" : mode === "group" && new Set(groupAssign.map((g) => g.ticker)).size !== groupAssign.length ? "each friend needs a different stock" : null,
-    stake > balance ? `your practice balance is ${usd(balance)}. pick a smaller stake.` : !STAKE_OPTIONS.includes(stake) ? "pick a stake" : null,
+    !STAKE_OPTIONS.includes(stake) ? "pick a stake" : null,
     !deadline ? "pick a deadline" : null,
     !agree ? "agree to the terms to send it" : null,
   ];
@@ -123,7 +126,7 @@ function NewDuelInner() {
       myTicker: mine!, opponentTicker: theirTicker, opponentId: mode === "open" ? null : opponents[0], stake,
       deadline: deadline.deadline, deadlineLabel: deadline.label, visibility, title: title || undefined,
       extra: mode === "group" ? groupAssign.slice(1) : undefined,
-    }), "challenge sent");
+    }), "challenge saved");
     setSubmitting(false);
     if (d) setCreated(d);
     else submitted.current = false;
@@ -131,31 +134,29 @@ function NewDuelInner() {
 
   // ---------- success ----------
   if (created) {
-    const link = absoluteUrl(inviteLink(created));
     const live = s.duels.find((d) => d.id === created.id) ?? created;
-    const names = created.participants.filter((p) => p.userId && p.userId !== me.id).map((p) => userById(p.userId)?.displayName).join(", ");
+    const link = absoluteUrl(inviteLink(created));
+    const funded = live.escrowState !== "unfunded";
     return (
-      <div className="mx-auto max-w-md animate-fade-up pt-4 text-center">
-        <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-gain-soft text-gain"><Check size={28} /></div>
-        <h1 className="font-display text-2xl font-bold">challenge sent</h1>
-        <p className="mt-1 text-[15px] text-muted">{created.open ? "anyone can take the other side." : `${names} can accept it now. it goes live at the first market close after everyone's in.`}</p>
-        <div className="card mt-5 p-4 text-left">
-          <p className="text-sm font-semibold">share the invite</p>
-          <p className="mt-1 truncate font-mono text-[12px] text-muted">{link}</p>
-          <div className="mt-3 grid grid-cols-2 gap-2">
-            <button className="btn-outline btn-sm" onClick={async () => { await navigator.clipboard.writeText(link).catch(() => {}); toast("success", "link copied"); }}><Copy size={15} /> copy link</button>
-            <button className="btn-dark btn-sm" onClick={() => shareLink(link, `${me.displayName} challenged you on beef: ${created.participants.map((p) => p.ticker).join(" vs ")}, ${usd(stake, 0)} each.`)}><Share2 size={15} /> share</button>
-          </div>
+      <div className="mx-auto max-w-md animate-fade-up pt-4">
+        <div className="text-center">
+          <div className={cx("mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full", funded ? "bg-gain-soft text-gain" : "bg-gold-soft text-gold")}>{funded ? <Check size={28} /> : <Lock size={26} />}</div>
+          <h1 className="font-display text-2xl font-bold">{funded ? "challenge sent" : "one more step: lock your stake"}</h1>
+          <p className="mt-1 text-[15px] text-muted">{funded ? (created.open ? "anyone can take the other side." : "your opponent can accept now. it goes live at the first market close after everyone's in.") : `your ${stake} test usdc goes into the beef escrow on base sepolia. nobody can accept until it's locked.`}</p>
         </div>
-        {live.status === "pending" && !REMOTE && (
-          <div className="card mt-3 border-dashed p-4 text-left">
-            <p className="flex items-center gap-2 text-sm font-semibold"><SimBadge label="demo" /> no friends online right now?</p>
-            <p className="mt-1 text-sm text-muted">simulate them accepting to see the rest of the flow.</p>
-            <button className="btn-outline btn-sm mt-3" onClick={() => run(() => simulateOpponentAccept(created.id), "accepted. prices lock at the next close")}>simulate acceptance</button>
+        <FundCard d={live} />
+        {funded && (
+          <div className="card mt-3 p-4">
+            <p className="text-sm font-semibold">share the invite</p>
+            <p className="mt-1 truncate font-mono text-[12px] text-muted">{link}</p>
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <button className="btn-outline btn-sm" onClick={async () => { await navigator.clipboard.writeText(link).catch(() => {}); toast("success", "link copied"); }}><Copy size={15} /> copy link</button>
+              <button className="btn-dark btn-sm" onClick={() => shareLink(link, `${me.displayName} challenged you on beef: ${created.participants.map((p) => p.ticker).join(" vs ")}, ${stake} test usdc each.`)}><Share2 size={15} /> share</button>
+            </div>
           </div>
         )}
         <div className="mt-5 flex justify-center gap-2">
-          <Link href={`/duel/${created.id}`} className="btn-primary">view duel</Link>
+          <Link href={`/duel/${created.id}`} className="btn-outline">view duel</Link>
           <Link href="/" className="btn-ghost">home</Link>
         </div>
       </div>
@@ -181,7 +182,7 @@ function NewDuelInner() {
           <span className="text-muted">{mode === "open" ? "open challenge" : opponents.map((id) => `@${userById(id)?.username}`).join(", ")}</span>
           {picked.some(Boolean) && <span className="font-bold">· {picked.map((t) => t ?? "?").join(" vs ")}</span>}
           {step > 2 && mine && <span className="text-muted">· you: <b className="text-ink">{mine}</b></span>}
-          {step > 3 && <span className="text-muted">· {usd(stake, 0)} each</span>}
+          {step > 3 && <span className="text-muted">· {stake} test usdc each</span>}
         </div>
       )}
 
@@ -284,17 +285,16 @@ function NewDuelInner() {
         <div>
           <div className="grid grid-cols-5 gap-2">
             {STAKE_OPTIONS.map((v) => (
-              <button key={v} disabled={v > balance} onClick={() => setStake(v)} aria-pressed={stake === v}
-                className={cx("rounded-xl border-2 py-3 font-display text-lg font-bold transition disabled:opacity-30", stake === v ? "border-ink bg-ink text-white" : "border-line bg-surface")}>${v}</button>
+              <button key={v} onClick={() => setStake(v)} aria-pressed={stake === v}
+                className={cx("rounded-xl border-2 py-3 font-display text-lg font-bold transition disabled:opacity-30", stake === v ? "border-ink bg-ink text-white" : "border-line bg-surface")}>{v}</button>
             ))}
           </div>
           <div className="mt-4 grid grid-cols-3 gap-2 text-center">
-            <div className="card p-3"><p className="text-xs text-muted">your stake</p><p className="num mt-0.5 font-display text-lg font-bold">{usd(stake, 0)}</p></div>
-            <div className="card p-3"><p className="text-xs text-muted">{participants > 2 ? `each of ${participants - 1} friends` : "their stake"}</p><p className="num mt-0.5 font-display text-lg font-bold">{usd(stake, 0)}</p></div>
-            <div className="card border-ink/20 bg-ink p-3 text-white"><p className="text-xs text-white/70">prize pool</p><p className="num mt-0.5 font-display text-lg font-bold">{usd(pot, 0)}</p></div>
+            <div className="card p-3"><p className="text-xs text-muted">your stake</p><p className="num mt-0.5 font-display text-lg font-bold">{stake}</p><p className="text-[10px] text-muted">test usdc</p></div>
+            <div className="card p-3"><p className="text-xs text-muted">{participants > 2 ? `each of ${participants - 1} friends` : "their stake"}</p><p className="num mt-0.5 font-display text-lg font-bold">{stake}</p><p className="text-[10px] text-muted">test usdc</p></div>
+            <div className="card border-ink/20 bg-ink p-3 text-white"><p className="text-xs text-white/70">prize pool</p><p className="num mt-0.5 font-display text-lg font-bold">{pot}</p><p className="text-[10px] text-white/70">test usdc</p></div>
           </div>
-          <p className="mt-3 text-[13px] text-muted">winner takes the pool. a draw returns everyone's stake. practice balance: <b className="text-ink">{usd(balance)}</b> · max {usd(MAX_STAKE, 0)} per duel.</p>
-          <p className="mt-2"><SimBadge label="practice money, not real" /></p>
+          <p className="mt-3 text-[13px] text-muted">winner takes the pool; a draw returns everyone's stake. stakes are test usdc on base sepolia (no monetary value), up to {MAX_STAKE} per duel. you'll need this much in your wallet when you lock it.</p>
         </div>
       )}
 
@@ -323,10 +323,13 @@ function NewDuelInner() {
               ["against", mode === "open" ? "open challenge · first to accept" : opponents.map((id) => `@${userById(id)?.username}`).join(", ")],
               ["you back", mine!],
               [mode === "group" ? "they back" : "they back", mode === "group" ? groupAssign.map((g) => `${g.ticker} (@${userById(g.userId)?.username})`).join(", ") : theirStocks[0]],
-              ["your stake", usd(stake, 0)],
-              ["prize pool", `${usd(pot, 0)} · winner takes all`],
+              ["your stake", `${stake} test usdc`],
+              ["prize pool", `${pot} test usdc · winner takes all`],
               ["deadline", `${deadline.label} · ${marketTime(deadline.deadline)}`],
-              ["prices lock", "first official close after everyone accepts"],
+              ["prices lock", "first official close after everyone's in"],
+              ["network", "base sepolia (testnet)"],
+              ["token", "usdc by circle (test, no monetary value)"],
+              ["fees", "none · gas covered by beef"],
               ["winner", "higher percentage return. identical returns are a draw."],
             ].map(([k, v]) => (
               <div key={k} className="flex justify-between gap-4 px-4 py-2.5 text-[15px]"><span className="shrink-0 text-muted">{k}</span><span className="text-right font-medium">{v}</span></div>
@@ -340,7 +343,7 @@ function NewDuelInner() {
           </div>
           <label className="card flex cursor-pointer items-start gap-3 p-4">
             <input type="checkbox" className="mt-1 h-5 w-5 accent-[#1D1D1F]" checked={agree} onChange={(e) => setAgree(e.target.checked)} />
-            <span className="text-sm text-ink-soft">i agree to these terms. once everyone accepts they can't be changed. this uses <b>simulated prices and practice money</b> and is entertainment, not investment advice.</span>
+            <span className="text-sm text-ink-soft">i agree to these terms. once everyone's in they can't be changed. stakes are <b>test usdc on base sepolia</b>, stock prices are simulated, and this is entertainment, not investment advice.</span>
           </label>
         </div>
       )}
@@ -351,7 +354,7 @@ function NewDuelInner() {
         {step < 5 ? (
           <button className="btn-dark w-full" disabled={!!blocked} onClick={() => setStep(step + 1)}>continue</button>
         ) : (
-          <button className="btn-primary w-full" disabled={!!blocked || submitting} onClick={submit}>{submitting ? "sending…" : `send challenge · ${usd(stake, 0)}`}</button>
+          <button className="btn-primary w-full" disabled={!!blocked || submitting} onClick={submit}>{submitting ? "saving…" : "continue to lock your stake"}</button>
         )}
       </div>
     </div>

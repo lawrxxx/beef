@@ -10,6 +10,10 @@ export interface VerifiedEndUser {
   eoa: Address | null;
   smartAccount: Address | null;
   authMethods: string[];
+  /** emails cdp verified for this user (email otp or oauth) */
+  emails: string[];
+  /** `sub` claims from custom-auth (supabase jwt) logins */
+  jwtSubs: string[];
 }
 
 export type EndUserVerifier = (accessToken: string) => Promise<VerifiedEndUser>;
@@ -37,12 +41,17 @@ const addr = (a: unknown): Address | null => (typeof a === "string" && isAddress
 /** maps cdp's end-user object to what beef needs (exported for tests) */
 export function mapEndUser(eu: any): VerifiedEndUser {
   const methods = eu?.authenticationMethods;
-  const authMethods = Array.isArray(methods) ? methods.map((m: any) => m?.type).filter(Boolean) : methods ? Object.keys(methods) : [];
+  const list: any[] = Array.isArray(methods) ? methods : methods ? Object.values(methods) : [];
+  const authMethods = list.map((m) => m?.type).filter(Boolean);
+  const emails = list.map((m) => (typeof m?.email === "string" ? m.email.toLowerCase() : null)).filter(Boolean) as string[];
+  const jwtSubs = list.filter((m) => m?.type === "jwt" && typeof m.sub === "string").map((m) => m.sub as string);
   return {
     cdpUserId: String(eu.userId),
     eoa: addr(eu.evmAccountObjects?.[0]?.address ?? eu.evmAccounts?.[0]),
     smartAccount: addr(eu.evmSmartAccountObjects?.[0]?.address ?? eu.evmSmartAccounts?.[0]),
     authMethods,
+    emails,
+    jwtSubs,
   };
 }
 

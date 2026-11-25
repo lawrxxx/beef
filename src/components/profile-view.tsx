@@ -2,9 +2,9 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { LogOut, Pencil, RotateCcw, Settings, Share2, Swords, Download } from "lucide-react";
+import { LogOut, Pencil, Settings, Share2, Swords, Download } from "lucide-react";
 import type { User } from "@/lib/types";
-import { REMOTE, resetDemo, signOut, useBeef } from "@/lib/store/store";
+import { signOut, useBeef } from "@/lib/store/store";
 import { achievementsFor, correctPicks, rivalsOf, statsFor, useMounted } from "@/lib/hooks";
 import { cx } from "@/lib/format";
 import { Avatar, CardSkeleton, Section, SimBadge, Tabs, TickerTag, useAction, Sheet } from "@/components/ui";
@@ -127,17 +127,17 @@ export function ProfileView({ user }: { user: User }) {
 
       <Sheet open={settings} onClose={() => setSettings(false)} title="settings">
         <div className="space-y-2">
-          <p className="text-sm text-muted">signed in as {s.session.email ?? "the demo account"} · {s.session.mode === "demo" ? "demo mode" : "supabase"}</p>
+          <p className="text-sm text-muted">signed in as {s.session.email}</p>
+          <button className="btn-outline w-full justify-start" onClick={() => shareLink(`/?ref=${user.username}`, "i'm on beef: friendly stock duels with friends. join me and let's settle an argument.")}><Share2 size={17} /> invite friends</button>
           {!install.installed && (
             <button className="btn-outline w-full justify-start" onClick={async () => { if (install.canPrompt) await install.prompt(); else setIosGuide(true); }}>
               <Download size={17} /> install beef on this device
             </button>
           )}
-          <Link href="/wallet" className="btn-outline w-full justify-start">wallet & practice balance</Link>
+          <Link href="/wallet" className="btn-outline w-full justify-start">wallet & test usdc</Link>
           <Link href="/rules" className="btn-outline w-full justify-start">how beef works & risk disclosure</Link>
-          {!REMOTE && <button className="btn-outline w-full justify-start" onClick={() => { if (confirm("reset all demo data on this device?")) { resetDemo(); setSettings(false); router.push("/"); } }}><RotateCcw size={17} /> reset demo data</button>}
-          <button className="btn-outline w-full justify-start text-loss" onClick={() => run(() => { signOut(); setSettings(false); router.push("/"); }, "signed out")}><LogOut size={17} /> sign out</button>
-          <div className="pt-2"><SimBadge label="simulated prices · practice money" /></div>
+          <button className="btn-outline w-full justify-start text-loss" onClick={() => run(async () => { await signOut(); setSettings(false); router.push("/"); }, "signed out")}><LogOut size={17} /> sign out</button>
+          <div className="pt-2"><SimBadge label="base sepolia testnet · test usdc" /></div>
         </div>
       </Sheet>
       <Sheet open={iosGuide} onClose={() => setIosGuide(false)} title="add beef to your home screen"><IOSGuide /></Sheet>

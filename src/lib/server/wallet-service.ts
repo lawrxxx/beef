@@ -2,7 +2,7 @@ import "server-only";
 import { decodeEventLog, getAddress, isAddress, isHex, parseAbi, type Address, type Hex, type TransactionReceipt } from "viem";
 import { CHAIN_ID, ENTRYPOINTS, ESCROW_ADDRESS, USDC_ADDRESS, assertBaseSepolia } from "@/lib/chain/config";
 import {
-  buildAcceptCalls, buildCreateDuelCalls, buildRefundCalls, buildSettleCalls, callsHash, decodeSmartAccountCallData, deserializeCalls,
+  OPEN_SLOT, buildCreateDuelCalls, buildJoinCalls, buildRefundCalls, buildSettleCalls, callsHash, decodeSmartAccountCallData, deserializeCalls,
   duelIdToBytes32, serializeCalls, termsHash, usdcUnits, type Call,
 } from "@/lib/wallet/calls";
 import { checkCalls, checkLimits, defaultPolicy, type SponsorshipPolicy } from "@/lib/wallet/policy";
@@ -23,8 +23,15 @@ const INTENT_TTL_MS = 10 * 60e3;
  * links a verified cdp wallet to a beef user. idempotent for the same pair, refuses a
  * second wallet for a user and a second user for a wallet (no duplicates).
  */
-export async function linkWallet(p: { appUserId: string; accessToken: string }, deps: { verify: EndUserVerifier; repo: WalletRepo; now?: Date }): Promise<WalletLink> {
+export async function linkWallet(p: { appUserId: string; appEmail?: string | null; accessToken: string }, deps: { verify: EndUserVerifier; repo: WalletRepo; now?: Date }): Promise<WalletLink> {
   const eu = await deps.verify(p.accessToken);
+  // the wallet must belong to the signed-in beef account: a custom-auth (supabase jwt)
+  // login must carry this user's id; an email / google login must carry this user's email
+  if (eu.jwtSubs.length > 0) {
+    if (!eu.jwtSubs.includes(p.appUserId)) throw new WalletError("this wallet belongs to a different beef account.", 403);
+  } else if (p.appEmail !== undefined) {
+    if (!p.appEmail || !eu.emails.includes(p.appEmail.toLowerCase())) throw new WalletError("sign in to your wallet with the same email as your beef account.", 403);
+  }
   if (!eu.smartAccount) throw new WalletError("your wallet is still being set up. try again in a moment.", 409);
   const mine = await deps.repo.getLinkByUser(p.appUserId);
   if (mine) {
@@ -55,6 +62,10 @@ export interface DuelForChain {
   calculationVersion: string;
   methodology: string;
   participants: { userId: string; ticker: string }[];
+  /** open public challenge: anyone (but the creator) may take the empty slot */
+  open?: boolean;
+  /** escrow state as recorded from verified onchain events */
+  escrowState?: "unfunded" | "funded" | "active" | "settled" | "refunded";
   /** present once beef's settlement service has a final result */
   settlement?: { status: "settled" | "draw" | "needs_verification"; winners: string[]; payloadHash: Hex };
 }
@@ -68,6 +79,7 @@ export interface PrepareDeps {
   now?: Date;
   newId?: () => string;
   sign?: (p: { escrow: Address; duelId: string; termsHash: Hex; winners: Address[]; settlementHash: Hex }) => Promise<Hex>;
+  signJoin?: (p: { escrow: Address; duelId: string; who: Address }) => Promise<Hex>;
 }
 
 /**
@@ -90,7 +102,8 @@ export async function prepareIntent(
   const duel = await deps.loadDuel(p.duelId);
   if (!duel) throw new WalletError("duel not found", 404);
   const me = duel.participants.find((x) => x.userId === link.userId);
-  if (!me) throw new WalletError("you're not in this duel", 403);
+  const canTakeOpenSlot = p.action === "accept" && !!duel.open && !me && duel.participants.some((x) => !x.userId);
+  if (!me && !canTakeOpenSlot) throw new WalletError("you're not in this duel", 403);
 
   const existing = await deps.repo.findOpenIntent(link.userId, duel.id, p.action);
   if (existing?.status === "confirmed") throw new WalletError("you've already done this for this duel.", 409);
@@ -101,21 +114,23 @@ export async function prepareIntent(
   if (p.action === "create") {
     if (duel.createdBy !== link.userId) throw new WalletError("only the creator opens the onchain duel", 403);
     if (duel.status !== "pending") throw new WalletError(`this duel is ${duel.status}`, 409);
-    const wallets: Address[] = [];
-    for (const part of duel.participants) {
-      const l = part.userId ? await deps.repo.getLinkByUser(part.userId) : null;
-      if (!l) throw new WalletError("everyone in the duel needs a beef wallet before stakes can go onchain.", 409);
-      wallets.push(l.smartAccount);
-    }
+    if (duel.escrowState && duel.escrowState !== "unfunded") throw new WalletError("this duel is already funded", 409);
+    // creator's wallet + one open slot per opponent. opponents take their slot with an
+    // oracle-signed join, so their wallets don't need to exist yet.
+    const wallets: Address[] = duel.participants.map((x) => (x.userId === link.userId ? link.smartAccount : OPEN_SLOT));
     amount = duel.stake;
     calls = buildCreateDuelCalls({
       usdc, escrow, duelId: duel.id, stake: duel.stake, participants: wallets,
       termsHash: termsHash({ duelId: duel.id, stake: duel.stake, tickers: duel.participants.map((x) => x.ticker), deadline: duel.deadline, calculationVersion: duel.calculationVersion, methodology: duel.methodology }),
     });
   } else if (p.action === "accept") {
-    if (!["pending", "accepted"].includes(duel.status)) throw new WalletError(`this duel is ${duel.status}`, 409);
+    if (duel.status !== "pending") throw new WalletError(`this duel is ${duel.status}`, 409);
+    if (duel.createdBy === link.userId) throw new WalletError("you created this duel", 409);
+    if (duel.escrowState !== "funded") throw new WalletError("the creator hasn't locked their stake yet. you can accept once they have.", 409);
+    if (!deps.signJoin) throw new WalletError("joining duels isn't configured on the server yet", 503);
     amount = duel.stake;
-    calls = buildAcceptCalls({ usdc, escrow, duelId: duel.id, stake: duel.stake });
+    const joinSig = await deps.signJoin({ escrow, duelId: duel.id, who: link.smartAccount });
+    calls = buildJoinCalls({ usdc, escrow, duelId: duel.id, stake: duel.stake, joinSig });
   } else if (p.action === "settle") {
     // payout: the server signs the final result; any participant can submit it
     const st = duel.settlement;
@@ -259,13 +274,17 @@ export function verifyReceipt(receipt: Pick<TransactionReceipt, "status" | "logs
     } catch { /* not this event */ }
   }
   if (!opOk) return { ok: false, reason: "user operation not found in this transaction" };
-  const want = intent.action === "create" ? "Created" : intent.action === "accept" ? "Deposited" : intent.action === "refund" ? "Refunded" : "Settled";
+  const want = intent.action === "create" ? "Created" : intent.action === "accept" ? "Joined" : intent.action === "refund" ? "Refunded" : "Settled";
   const duelKey = duelIdToBytes32(intent.duelId);
+  const sender = getAddress(intent.smartAccount);
   const found = receipt.logs.some((log) => {
     if (log.address.toLowerCase() !== escrow.toLowerCase()) return false;
     try {
       const ev = decodeEventLog({ abi: BEEF_ESCROW_ABI, data: log.data, topics: log.topics }) as { eventName: string; args: any };
-      return ev.eventName === want && ev.args.duelId === duelKey;
+      if (ev.eventName !== want || ev.args.duelId !== duelKey) return false;
+      if (want === "Created") return getAddress(ev.args.creator) === sender;
+      if (want === "Joined") return getAddress(ev.args.who) === sender;
+      return true;
     } catch { return false; }
   });
   return found ? { ok: true } : { ok: false, reason: `escrow didn't record ${want} for this duel` };
@@ -276,6 +295,8 @@ export interface ConfirmDeps {
   verify: EndUserVerifier;
   getReceipt: (txHash: Hex) => Promise<Pick<TransactionReceipt, "status" | "logs"> | null>;
   escrow?: Address | null;
+  /** applies a verified onchain result to the app database (funded, accepted, settled…) */
+  onConfirmed?: (intent: WalletIntent & { txHash: Hex }) => Promise<void>;
 }
 
 export async function confirmIntent(p: { accessToken: string; intentId: string; userOpHash: Hex; txHash: Hex }, deps: ConfirmDeps) {
@@ -298,8 +319,10 @@ export async function confirmIntent(p: { accessToken: string; intentId: string; 
     await deps.repo.updateIntent(intent.id, { status: "failed", error: v.reason, userOpHash: p.userOpHash, txHash: p.txHash }, ["prepared", "sponsored", "submitted"]);
     throw new WalletError(`couldn't verify the transaction: ${v.reason}`, 422);
   }
-  await deps.repo.updateIntent(intent.id, { status: "confirmed", userOpHash: p.userOpHash, txHash: p.txHash }, ["prepared", "sponsored", "submitted"]);
-  return { ...intent, status: "confirmed" as const, userOpHash: p.userOpHash, txHash: p.txHash };
+  const moved = await deps.repo.updateIntent(intent.id, { status: "confirmed", userOpHash: p.userOpHash, txHash: p.txHash }, ["prepared", "sponsored", "submitted"]);
+  const done = { ...intent, status: "confirmed" as const, userOpHash: p.userOpHash, txHash: p.txHash };
+  if (moved && deps.onConfirmed) await deps.onConfirmed(done); // exactly once, after verification
+  return done;
 }
 
 export { deserializeCalls };

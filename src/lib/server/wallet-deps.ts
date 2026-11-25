@@ -3,23 +3,21 @@ import { NextResponse } from "next/server";
 import { createPublicClient, http, keccak256, toHex, type Hex } from "viem";
 import { CHAIN } from "@/lib/chain/config";
 import { getAdminSupabase, getServerSupabase } from "@/lib/supabase/server";
-import { MemoryWalletRepo, SupabaseWalletRepo, type WalletRepo } from "./wallet-repo";
+import { SupabaseWalletRepo, type WalletRepo } from "./wallet-repo";
 import { verifyWithCdp, type EndUserVerifier, type VerifiedEndUser } from "./cdp";
 import { WalletError, type DuelForChain } from "./wallet-service";
 import { clientKey, rateLimit } from "./rate-limit";
 
-const g = globalThis as unknown as { __beefWalletRepo?: MemoryWalletRepo };
-
-/** live mode: postgres (service role). demo mode: server memory (resets on redeploy). */
+/** wallet records live in postgres (written with the service role only) */
 export function getWalletRepo(): WalletRepo {
   const admin = getAdminSupabase();
-  if (admin) return new SupabaseWalletRepo(admin);
-  return (g.__beefWalletRepo ??= new MemoryWalletRepo());
+  if (!admin) throw new WalletError("beef isn't connected to its database", 503);
+  return new SupabaseWalletRepo(admin);
 }
 
 export const verifier: EndUserVerifier = verifyWithCdp;
 
-/** the beef user making the request. live mode: the supabase session. demo mode: none. */
+/** the beef user making the request. from the supabase session. */
 export async function appUserId(): Promise<string | null> {
   const sb = await getServerSupabase();
   if (!sb) return null;
@@ -27,12 +25,11 @@ export async function appUserId(): Promise<string | null> {
   return data.user?.id ?? null;
 }
 
-export const liveMode = () => !!getAdminSupabase();
 
 export async function loadDuelForChain(duelId: string): Promise<DuelForChain | null> {
   const db = getAdminSupabase();
-  if (!db) throw new WalletError("onchain stakes need live mode (supabase) so every participant has a verified wallet.", 400);
-  const { data: d } = await db.from("duels").select("id,created_by,status,stake,deadline,calculation_version,methodology,duel_settlements(status,winner_ids,payload)").eq("id", duelId).maybeSingle();
+  if (!db) throw new WalletError("beef isn't connected to its database", 503);
+  const { data: d } = await db.from("duels").select("id,created_by,status,stake,deadline,calculation_version,methodology,is_open,escrow_state,duel_settlements(status,winner_ids,payload)").eq("id", duelId).maybeSingle();
   if (!d) return null;
   const { data: ps } = await db.from("duel_participants").select("user_id,ticker").eq("duel_id", duelId);
   const parts = (ps ?? []).map((p: any) => ({ userId: p.user_id ?? "", ticker: p.ticker }));
@@ -40,6 +37,8 @@ export async function loadDuelForChain(duelId: string): Promise<DuelForChain | n
   return {
     id: d.id, createdBy: d.created_by, status: d.status, stake: Number(d.stake), deadline: new Date(d.deadline).toISOString(),
     calculationVersion: d.calculation_version, methodology: d.methodology, participants: parts,
+    open: !!(d as any).is_open,
+    escrowState: (d as any).escrow_state,
     settlement: settlementOf((d as any).duel_settlements),
   };
 }
@@ -82,4 +81,21 @@ export function cachedVerifier(): EndUserVerifier & { last?: VerifiedEndUser } {
   let cache: Promise<VerifiedEndUser> | null = null;
   const f = ((t: string) => (cache ??= verifier(t))) as EndUserVerifier & { last?: VerifiedEndUser };
   return f;
+}
+
+/**
+ * applies a verified onchain result to the database (service role). called exactly once
+ * per confirmed intent, after the receipt and escrow event were checked.
+ */
+export async function applyConfirmed(i: { action: string; duelId: string; userId: string; txHash: string }) {
+  const db = getAdminSupabase();
+  if (!db) return;
+  const call = async (fn: string, args: Record<string, unknown>) => {
+    const { error } = await db.rpc(fn, args);
+    if (error) throw new Error(`${fn}: ${error.message}`);
+  };
+  if (i.action === "create") await call("set_escrow_state", { p_duel: i.duelId, p_state: "funded", p_tx: i.txHash });
+  else if (i.action === "accept") await call("accept_duel_for", { p_duel: i.duelId, p_user: i.userId, p_tx: i.txHash });
+  else if (i.action === "settle") await call("set_escrow_state", { p_duel: i.duelId, p_state: "settled", p_tx: i.txHash });
+  else if (i.action === "refund") await call("set_escrow_state", { p_duel: i.duelId, p_state: "refunded", p_tx: i.txHash });
 }

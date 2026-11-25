@@ -9,7 +9,7 @@ import {
 } from "lucide-react";
 import type { Duel } from "@/lib/types";
 import {
-  REMOTE, acceptDuel, cancelDuel, declineDuel, inviteLink, requestLock, requestSettlement, simulateOpponentAccept, useBeef,
+  cancelDuel, declineDuel, inviteLink, requestSettlement, useBeef,
 } from "@/lib/store/store";
 import { livePerformance, useMe, useMounted, useNow, useQuotes, userById } from "@/lib/hooks";
 import { canAccept, isParticipant, STATUS_LABEL } from "@/lib/derive";
@@ -23,7 +23,7 @@ import dynamic from "next/dynamic";
 import { cdpEnabled } from "@/components/wallet/cdp-provider";
 
 // wallet code (viem + cdp) only loads where it can be used: live mode with cdp configured
-const OnchainStake = dynamic(() => import("@/components/wallet/onchain-stake").then((m) => m.OnchainStake), { ssr: false });
+const DuelFunding = dynamic(() => import("@/components/wallet/duel-funding").then((m) => m.DuelFunding), { ssr: false });
 
 export default function DuelPage() {
   const { id } = useParams<{ id: string }>();
@@ -138,16 +138,9 @@ function DuelView({ d }: { d: Duel }) {
           <div className="card p-4">
             <p className="font-semibold">{usersMap[d.createdBy]?.displayName} wants to beef</p>
             <p className="mt-1 text-sm text-muted">
-              you'd take <b className="text-ink">{d.participants.find((p) => p.userId === me?.id && !p.accepted)?.ticker ?? d.participants.find((p) => p.userId === "")?.ticker}</b>. {usd(d.stake, 0)} from your practice balance is held until it settles. invitation expires {marketTime(d.inviteExpiresAt)}.
+              you'd take <b className="text-ink">{d.participants.find((p) => p.userId === me?.id && !p.accepted)?.ticker ?? d.participants.find((p) => p.userId === "")?.ticker}</b> for {d.stake} test usdc each. accepting locks your stake in the escrow until it settles. read the <button className="underline" onClick={() => setShowTerms(true)}>terms</button>. invitation expires {marketTime(d.inviteExpiresAt)}.
             </p>
-            <label className="mt-3 flex items-start gap-3 text-sm text-ink-soft">
-              <input type="checkbox" className="mt-0.5 h-5 w-5 accent-[#1D1D1F]" checked={agree} onChange={(e) => setAgree(e.target.checked)} />
-              <span>i've read the <button className="underline" onClick={() => setShowTerms(true)}>terms</button> and agree to them. simulated prices, practice money.</span>
-            </label>
-            <div className="mt-3 grid grid-cols-2 gap-2">
-              <button className="btn-outline" onClick={() => run(() => declineDuel(d.id), "declined")}>decline</button>
-              <button className="btn-primary" disabled={!agree} onClick={() => run(() => acceptDuel(d.id, agree), "you're in! prices lock at the next close")}>accept · {usd(d.stake, 0)}</button>
-            </div>
+            {!d.open && <button className="btn-outline btn-sm mt-3" onClick={() => run(() => declineDuel(d.id), "declined")}>decline</button>}
           </div>
         )}
         {d.status === "pending" && !me && (
@@ -156,9 +149,9 @@ function DuelView({ d }: { d: Duel }) {
         {d.status === "pending" && mine && !acceptable && (
           <div className="card p-4">
             <p className="flex items-center gap-2 font-semibold"><Clock size={17} /> waiting for {d.open ? "someone to accept" : d.participants.filter((p) => !p.accepted).map((p) => `@${usersMap[p.userId]?.username}`).join(", ")}</p>
-            <p className="mt-1 text-sm text-muted">invitation expires {marketTime(d.inviteExpiresAt)}.</p>
+            <p className="mt-1 text-sm text-muted">{d.escrowState === "unfunded" ? "lock your stake below to send it." : `invitation expires ${marketTime(d.inviteExpiresAt)}.`}</p>
             <div className="mt-3 grid grid-cols-2 gap-2">
-              <button className="btn-dark btn-sm" onClick={() => shareLink(inviteLink(d), `${me?.displayName} challenged you on beef: ${d.participants.map((p) => p.ticker).join(" vs ")}, ${usd(d.stake, 0)} each.`)}><Share2 size={15} /> share invite</button>
+              <button className="btn-dark btn-sm" disabled={d.escrowState === "unfunded"} onClick={() => shareLink(inviteLink(d), `${me?.displayName} challenged you on beef: ${d.participants.map((p) => p.ticker).join(" vs ")}, ${d.stake} test usdc each.`)}><Share2 size={15} /> share invite</button>
               {d.createdBy === me?.id && <button className="btn-outline btn-sm" onClick={() => run(() => cancelDuel(d.id), "duel cancelled")}>cancel</button>}
             </div>
           </div>
@@ -195,7 +188,7 @@ function DuelView({ d }: { d: Duel }) {
         {live && quoteError && <p className="text-sm text-loss">live prices are unavailable right now. the result isn't affected: it uses official closes.</p>}
       </div>
 
-      {cdpEnabled() && REMOTE && <OnchainStake d={d} meId={me?.id ?? null} />}
+      {cdpEnabled() && <DuelFunding d={d} />}
 
       {/* price table */}
       {(live || done || d.status === "awaiting_verification" || d.status === "pending" || d.status === "accepted") && (
@@ -233,19 +226,6 @@ function DuelView({ d }: { d: Duel }) {
         </div>
       )}
 
-      {/* demo time controls */}
-      {(d.status === "accepted" || live || (d.status === "pending" && mine && !acceptable && !REMOTE)) && (mine || !REMOTE) && (
-        <div className="card mt-4 border-dashed p-4">
-          <p className="flex items-center gap-2 text-sm font-semibold"><FastForward size={16} /> demo time controls <SimBadge label="demo only" /></p>
-          <p className="mt-1 text-[13px] text-muted">real duels wait for real market closes. in the demo you can jump ahead: the server computes the outcome from simulated closing prices. you can't pick the prices, only skip the wait.</p>
-          <div className="mt-3 flex flex-wrap gap-2">
-            {d.status === "pending" && !REMOTE && <button className="btn-outline btn-sm" onClick={() => run(() => simulateOpponentAccept(d.id), "accepted")}>simulate acceptance</button>}
-            {d.status === "accepted" && d.lockAt && <button className="btn-outline btn-sm" disabled={busy} onClick={() => busyRun(() => requestLock(d.id, d.lockAt), "starting prices locked")}>jump to price lock</button>}
-            {live && <button className="btn-outline btn-sm" disabled={busy} onClick={() => busyRun(() => requestSettlement(d.id, new Date(new Date(d.deadline).getTime() + 60_000).toISOString()), "settled by the server")}>jump to deadline & settle</button>}
-          </div>
-        </div>
-      )}
-
       {/* terms */}
       <div className="card mt-4">
         <button className="flex w-full items-center justify-between px-4 py-3.5" onClick={() => setShowTerms((v) => !v)} aria-expanded={showTerms}>
@@ -256,12 +236,12 @@ function DuelView({ d }: { d: Duel }) {
           <dl className="divide-y border-t text-sm">
             {[
               ["stocks", d.participants.map((p) => `${p.ticker} (@${usersMap[p.userId]?.username ?? "open"})`).join(" vs ")],
-              ["stake", `${usd(d.stake, 0)} each, practice money`],
+              ["stake", `${d.stake} test usdc each, held by the beef escrow on base sepolia`],
               ["comparison", "percentage return, official closing prices"],
               ["price lock", d.terms.priceRule],
               ["deadline", marketTime(d.deadline)],
               ["settlement", d.terms.settlementRule],
-              ["data provider", d.terms.provider === "mock" ? "beef simulated market (not live data)" : d.terms.provider],
+              ["price data", d.terms.provider === "mock" ? "beef simulated market prices (not live)" : d.terms.provider],
               ["market timezone", "america/new_york (et). stored in utc."],
               ["calculation", d.terms.calculationVersion],
               ["created", `${marketTime(d.createdAt)} by @${usersMap[d.createdBy]?.username}`],
@@ -298,13 +278,13 @@ function DuelView({ d }: { d: Duel }) {
 
 function SETTLEMENT_LABEL(d: Duel): string {
   switch (d.status) {
-    case "pending": return "starts once everyone accepts";
+    case "pending": return d.escrowState === "unfunded" ? "waiting for the creator's stake" : "waiting for opponents to lock their stakes";
     case "accepted": return "terms locked · prices lock at the close";
     case "active": return "pending · settles at the deadline close";
     case "awaiting_verification": return "paused · waiting for verified prices";
-    case "completed": return d.settlement?.status === "draw" ? "settled · draw, stakes returned" : "settled · winner paid (practice money)";
-    case "cancelled": return "cancelled · nothing was staked";
-    case "declined": return "declined · nothing was staked";
-    case "expired": return "invite expired · nothing was staked";
+    case "completed": return d.escrowState === "settled" ? (d.settlement?.status === "draw" ? "settled · draw, stakes returned onchain" : "settled · paid out onchain") : "result final · payout ready to release";
+    case "cancelled": return d.escrowState === "funded" ? "cancelled · creator can reclaim the stake after the funding window" : d.escrowState === "refunded" ? "cancelled · stake refunded" : "cancelled · nothing was staked";
+    case "declined": return d.escrowState === "funded" ? "declined · creator can reclaim the stake after the funding window" : d.escrowState === "refunded" ? "declined · stake refunded" : "declined · nothing was staked";
+    case "expired": return d.escrowState === "funded" ? "expired · creator can reclaim the stake" : d.escrowState === "refunded" ? "expired · stake refunded" : "invite expired · nothing was staked";
   }
 }

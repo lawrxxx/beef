@@ -5,7 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { Suspense, useMemo, useState } from "react";
 import { Plus, Swords } from "lucide-react";
 import type { Duel } from "@/lib/types";
-import { practiceBalance, useBeef } from "@/lib/store/store";
+import { useBeef } from "@/lib/store/store";
 import { useMe, useMounted } from "@/lib/hooks";
 import { canAccept, isParticipant } from "@/lib/derive";
 import { usd } from "@/lib/format";
@@ -46,7 +46,7 @@ function DuelsInner() {
     <div>
       <PageHeader
         title="duels"
-        subtitle={me && mounted ? `practice balance ${usd(practiceBalance(s, me.id))}` : "every beef, in one place"}
+        subtitle="every beef, in one place"
         action={<Link href="/duel/new" className="btn-primary btn-sm"><Plus size={16} /> new</Link>}
       />
       <Tabs<Tab> value={tab} onChange={setTab} className="mb-4" options={[
@@ -63,7 +63,7 @@ function DuelsInner() {
           </section>
         ))
       )}
-      <div className="mt-4 flex justify-center"><SimBadge label="practice money · simulated prices" /></div>
+      <div className="mt-4 flex justify-center"><SimBadge label="staked in test usdc on base sepolia" /></div>
     </div>
   );
 }

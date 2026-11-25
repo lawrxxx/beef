@@ -12,10 +12,10 @@ export async function POST(req: Request) {
   if (!ctx.ok) return ctx.res;
   if (ctx.duel.status !== "accepted") return NextResponse.json({ error: `duel is ${ctx.duel.status}` }, { status: 409 });
   const r = await lockStartPrices(ctx.duel, getMarketProvider(), ctx.now);
-  if (r.ok && ctx.mode === "supabase") {
+  if (r.ok) {
     const db = getAdminSupabase()!;
     await saveSnapshots(db, ctx.duel.id, r.snapshots);
     await db.from("duels").update({ status: "active", lock_at: r.lockAt, activated_at: r.lockAt }).eq("id", ctx.duel.id).eq("status", "accepted");
   }
-  return NextResponse.json(r);
+  return NextResponse.json({ ok: r.ok, lockAt: r.lockAt, issues: r.issues });
 }

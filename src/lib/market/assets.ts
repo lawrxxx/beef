@@ -39,14 +39,14 @@ export const MOCK_CORPORATE_ACTIONS: CorporateAction[] = [
 
 /**
  * simulated data gaps used to exercise the "pause settlement" path.
- * smci is marked halted for a session so the seeded duel needs verification.
+ * smci is marked halted for a session to exercise the verification path.
  */
 export const MOCK_DATA_GAPS: { ticker: string; session: string; status: "halted" | "missing" }[] = [
   { ticker: "SMCI", session: "2026-11-20", status: "halted" },
 ];
 
 /**
- * scripted simulated outcomes for the demo's reference duels. at `from` the close is
+ * scripted simulated outcomes used by the settlement tests. at `from` the close is
  * rounded to whole dollars, and at `to` it is exactly from × (1 + pct/100).
  * - both rise:   nvda +5% vs aapl +3%
  * - both fall:   tsla −5% vs meta −2%

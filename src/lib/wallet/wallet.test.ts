@@ -1,10 +1,10 @@
 import { describe, expect, it, beforeEach } from "vitest";
 import {
-  encodeAbiParameters, encodeEventTopics, encodeFunctionData, erc20Abi, getAddress, keccak256, toHex, type Address, type Hex,
+  decodeFunctionData, encodeAbiParameters, encodeEventTopics, encodeFunctionData, erc20Abi, getAddress, keccak256, toHex, type Address, type Hex,
 } from "viem";
 import { CHAIN_ID, ENTRYPOINTS, USDC_ADDRESS, assertBaseSepolia } from "@/lib/chain/config";
 import {
-  SMART_WALLET_ABI, buildAcceptCalls, buildCreateDuelCalls, callsHash, decodeSmartAccountCallData, duelIdToBytes32, usdcUnits, type Call,
+  SMART_WALLET_ABI, buildJoinCalls, buildCreateDuelCalls, OPEN_SLOT, callsHash, decodeSmartAccountCallData, duelIdToBytes32, usdcUnits, type Call,
 } from "./calls";
 import { checkCalls, checkLimits, defaultPolicy } from "./policy";
 import { BEEF_ESCROW_ABI } from "./escrow-abi";
@@ -57,7 +57,7 @@ describe("calls + decoding", () => {
 });
 
 describe("sponsorship policy", () => {
-  const accept = buildAcceptCalls({ usdc: USDC_ADDRESS, escrow: ESCROW, duelId: DUEL, stake: 10 });
+  const accept = buildJoinCalls({ usdc: USDC_ADDRESS, escrow: ESCROW, duelId: DUEL, stake: 10, joinSig: "0x1234" });
   const approve = (spender: Address, amount: bigint): Call => ({ to: USDC_ADDRESS, value: 0n, data: encodeFunctionData({ abi: erc20Abi, functionName: "approve", args: [spender, amount] }) });
 
   it("allows the beef flows", () => {
@@ -89,9 +89,9 @@ describe("sponsorship policy", () => {
 // ---------- server flows ----------
 
 const users: Record<string, VerifiedEndUser> = {
-  "tok-alice": { cdpUserId: "cdp-alice", eoa: getAddress("0xa11ce000000000000000000000000000000000e0"), smartAccount: ALICE_SA, authMethods: ["email"] },
-  "tok-bob": { cdpUserId: "cdp-bob", eoa: null, smartAccount: BOB_SA, authMethods: ["oauth2"] },
-  "tok-new": { cdpUserId: "cdp-new", eoa: null, smartAccount: null, authMethods: ["email"] },
+  "tok-alice": { cdpUserId: "cdp-alice", eoa: getAddress("0xa11ce000000000000000000000000000000000e0"), smartAccount: ALICE_SA, authMethods: ["jwt"], emails: [], jwtSubs: ["alice"] },
+  "tok-bob": { cdpUserId: "cdp-bob", eoa: null, smartAccount: BOB_SA, authMethods: ["google"], emails: ["bob@example.com"], jwtSubs: [] },
+  "tok-new": { cdpUserId: "cdp-new", eoa: null, smartAccount: null, authMethods: ["email"], emails: ["new@example.com"], jwtSubs: [] },
 };
 const verify = async (t: string) => { const u = users[t]; if (!u) throw new Error("your wallet session couldn't be verified"); return u; };
 const duel: DuelForChain = {
@@ -107,8 +107,9 @@ const linkBoth = async () => {
   await linkWallet({ appUserId: "alice", accessToken: "tok-alice" }, { verify, repo });
   await linkWallet({ appUserId: "bob", accessToken: "tok-bob" }, { verify, repo });
 };
+const joinSigner = async () => "0xabcd" as Hex;
 const prep = (accessToken: string, action: "create" | "accept" | "refund" = "create", over: Partial<Parameters<typeof prepareIntent>[1]> = {}) =>
-  prepareIntent({ accessToken, action, duelId: DUEL }, { verify, repo, loadDuel: async () => duel, escrow: ESCROW, ...over });
+  prepareIntent({ accessToken, action, duelId: DUEL }, { verify, repo, loadDuel: async () => duel, escrow: ESCROW, signJoin: joinSigner, ...over });
 
 describe("wallet linking", () => {
   it("links from verified cdp data, and a returning user gets the same link", async () => {
@@ -120,19 +121,25 @@ describe("wallet linking", () => {
   });
   it("refuses a second wallet for the same user", async () => {
     await linkWallet({ appUserId: "alice", accessToken: "tok-alice" }, { verify, repo });
-    await expect(linkWallet({ appUserId: "alice", accessToken: "tok-bob" }, { verify, repo })).rejects.toThrow(/different wallet/);
+    await expect(linkWallet({ appUserId: "alice", appEmail: "bob@example.com", accessToken: "tok-bob" }, { verify, repo })).rejects.toThrow(/different wallet/);
   });
   it("refuses one wallet for two users", async () => {
     await linkWallet({ appUserId: "alice", accessToken: "tok-alice" }, { verify, repo });
-    await expect(linkWallet({ appUserId: "mallory", accessToken: "tok-alice" }, { verify, repo })).rejects.toThrow(/another beef account/);
+    await expect(linkWallet({ appUserId: "mallory", accessToken: "tok-alice" }, { verify, repo })).rejects.toThrow(/different beef account/); // jwt sub is alice's
   });
+  it("binds the wallet to the signed-in beef account (jwt sub or email)", async () => {
+    await expect(linkWallet({ appUserId: "mallory", accessToken: "tok-alice" }, { verify, repo })).rejects.toMatchObject({ status: 403 });
+    await expect(linkWallet({ appUserId: "bob", appEmail: "someone@else.com", accessToken: "tok-bob" }, { verify, repo })).rejects.toThrow(/same email/);
+    await expect(linkWallet({ appUserId: "bob", appEmail: "BOB@example.com", accessToken: "tok-bob" }, { verify, repo })).resolves.toMatchObject({ smartAccount: BOB_SA });
+  });
+
   it("waits for the smart account and rejects unverifiable tokens", async () => {
     await expect(linkWallet({ appUserId: "n", accessToken: "tok-new" }, { verify, repo })).rejects.toThrow(/being set up/);
     await expect(linkWallet({ appUserId: "x", accessToken: "forged" }, { verify, repo })).rejects.toThrow(/couldn't be verified/);
   });
   it("maps cdp's end-user object without trusting anything else", () => {
-    const m = mapEndUser({ userId: "u1", authenticationMethods: [{ type: "email" }, { type: "oauth2" }], evmAccountObjects: [{ address: "0xa11ce000000000000000000000000000000000e0" }], evmSmartAccountObjects: [{ address: ALICE_SA.toLowerCase() }] });
-    expect(m).toEqual({ cdpUserId: "u1", eoa: getAddress("0xa11ce000000000000000000000000000000000e0"), smartAccount: ALICE_SA, authMethods: ["email", "oauth2"] });
+    const m = mapEndUser({ userId: "u1", authenticationMethods: [{ type: "email", email: "A@x.com" }, { type: "jwt", kid: "k", sub: "supa-1" }], evmAccountObjects: [{ address: "0xa11ce000000000000000000000000000000000e0" }], evmSmartAccountObjects: [{ address: ALICE_SA.toLowerCase() }] });
+    expect(m).toEqual({ cdpUserId: "u1", eoa: getAddress("0xa11ce000000000000000000000000000000000e0"), smartAccount: ALICE_SA, authMethods: ["email", "jwt"], emails: ["a@x.com"], jwtSubs: ["supa-1"] });
   });
 });
 
@@ -141,18 +148,36 @@ describe("intents", () => {
     await linkBoth();
     await expect(prep("tok-alice", "create", { escrow: null })).rejects.toMatchObject({ status: 503 });
   });
-  it("builds the creator's calls on the server and dedupes repeat requests", async () => {
-    await linkBoth();
+  it("builds the creator's calls on the server (open slot for the opponent) and dedupes repeat requests", async () => {
+    await linkWallet({ appUserId: "alice", accessToken: "tok-alice" }, { verify, repo }); // opponent needs no wallet yet
     const a = await prep("tok-alice");
     expect(a.intent.calls).toHaveLength(2);
+    const created = decodeFunctionData({ abi: BEEF_ESCROW_ABI, data: a.intent.calls[1].data as Hex });
+    expect((created.args as any)[2]).toEqual([ALICE_SA, OPEN_SLOT]);
     expect(a.summary.amountUsdc).toBe(10);
     const b = await prep("tok-alice");
     expect(b.intent.id).toBe(a.intent.id); // double tap -> same intent
   });
-  it("refuses non-creators, outsiders and unlinked opponents", async () => {
-    await linkWallet({ appUserId: "alice", accessToken: "tok-alice" }, { verify, repo });
-    await expect(prep("tok-alice")).rejects.toThrow(/everyone in the duel needs a beef wallet/);
-    await linkWallet({ appUserId: "bob", accessToken: "tok-bob" }, { verify, repo });
+  it("accept needs a funded duel and a server-signed join", async () => {
+    await linkBoth();
+    await expect(prep("tok-bob", "accept")).rejects.toThrow(/hasn't locked their stake/);
+    const funded = { ...duel, escrowState: "funded" as const };
+    await expect(prep("tok-bob", "accept", { loadDuel: async () => funded, signJoin: undefined })).rejects.toMatchObject({ status: 503 });
+    const r = await prep("tok-bob", "accept", { loadDuel: async () => funded });
+    const j = decodeFunctionData({ abi: BEEF_ESCROW_ABI, data: r.intent.calls[1].data as Hex });
+    expect(j.functionName).toBe("join");
+    await expect(prep("tok-alice", "accept", { loadDuel: async () => funded })).rejects.toThrow(/you created this duel/);
+  });
+
+  it("public challenges: a non-participant may take the open slot", async () => {
+    await linkBoth();
+    const open = { ...duel, open: true, escrowState: "funded" as const, participants: [{ userId: "alice", ticker: "NVDA" }, { userId: "", ticker: "AMD" }] };
+    const r = await prep("tok-bob", "accept", { loadDuel: async () => open });
+    expect(r.intent.userId).toBe("bob");
+  });
+
+  it("refuses non-creators and outsiders", async () => {
+    await linkBoth();
     await expect(prep("tok-bob", "create")).rejects.toMatchObject({ status: 403 });
     await expect(prep("tok-alice", "create", { loadDuel: async () => ({ ...duel, participants: [{ userId: "x", ticker: "A" }, { userId: "y", ticker: "B" }] }) })).rejects.toThrow(/not in this duel/);
     await expect(prepareIntent({ accessToken: "tok-alice", action: "settle", duelId: DUEL }, { verify, repo, loadDuel: async () => duel, escrow: ESCROW })).rejects.toBeInstanceOf(WalletError);
@@ -265,11 +290,11 @@ describe("receipt verification", () => {
     topics: encodeEventTopics({ abi: USER_OPERATION_EVENT, eventName: "UserOperationEvent", args: { userOpHash, sender: o.sender ?? ALICE_SA, paymaster: o.paymaster ?? OTHER } }) as [Hex, ...Hex[]],
     data: encodeAbiParameters([{ type: "uint256" }, { type: "bool" }, { type: "uint256" }, { type: "uint256" }], [0n, o.success ?? true, 1n, 1n]),
   });
-  const escrowLog = (eventName: "Created" | "Deposited", duelId = DUEL) => ({
+  const escrowLog = (eventName: "Created" | "Deposited" | "Joined", duelId = DUEL, who: Address = ALICE_SA) => ({
     address: ESCROW,
     topics: eventName === "Created"
-      ? encodeEventTopics({ abi: BEEF_ESCROW_ABI, eventName, args: { duelId: duelIdToBytes32(duelId), creator: ALICE_SA } }) as [Hex, ...Hex[]]
-      : encodeEventTopics({ abi: BEEF_ESCROW_ABI, eventName, args: { duelId: duelIdToBytes32(duelId), who: ALICE_SA } }) as [Hex, ...Hex[]],
+      ? encodeEventTopics({ abi: BEEF_ESCROW_ABI, eventName, args: { duelId: duelIdToBytes32(duelId), creator: who } }) as [Hex, ...Hex[]]
+      : encodeEventTopics({ abi: BEEF_ESCROW_ABI, eventName, args: { duelId: duelIdToBytes32(duelId), who } }) as [Hex, ...Hex[]],
     data: eventName === "Created" ? encodeAbiParameters([{ type: "uint256" }, { type: "bytes32" }], [10_000_000n, keccak256("0x01")]) : "0x" as Hex,
   });
   const intent = { id: "i1", userId: "alice", smartAccount: ALICE_SA, action: "create" as const, duelId: DUEL, amountUnits: "10000000", callsHash: "0x" as Hex, calls: [], status: "sponsored" as const, createdAt: "", expiresAt: "" };
@@ -284,23 +309,32 @@ describe("receipt verification", () => {
     ["someone else's op", { status: "success", logs: [uoLog({ sender: BOB_SA }), escrowLog("Created")] }, /not found/],
     ["missing escrow event", { status: "success", logs: [uoLog({})] }, /escrow didn't record/],
     ["event for another duel", { status: "success", logs: [uoLog({}), escrowLog("Created", "other")] }, /escrow didn't record/],
+    ["duel created by someone else", { status: "success", logs: [uoLog({}), escrowLog("Created", DUEL, BOB_SA)] }, /escrow didn't record/],
   ])("rejects %s", (_n, receipt, re) => {
     const r = verifyReceipt(receipt as any, intent, userOpHash, ESCROW);
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.reason).toMatch(re);
   });
 
-  it("confirmation is idempotent and owner-only", async () => {
+  it("accept is verified by a Joined event for this wallet", () => {
+    const acc = { ...intent, action: "accept" as const };
+    expect(verifyReceipt({ status: "success", logs: [uoLog({}), escrowLog("Joined")] as any }, acc, userOpHash, ESCROW)).toEqual({ ok: true });
+    expect(verifyReceipt({ status: "success", logs: [uoLog({}), escrowLog("Joined", DUEL, BOB_SA)] as any }, acc, userOpHash, ESCROW).ok).toBe(false);
+  });
+
+  it("confirmation is idempotent and owner-only, and applies its effect exactly once", async () => {
     await linkBoth();
     const { intent: i } = await prep("tok-alice");
     const receipt = { status: "success" as const, logs: [uoLog({}), escrowLog("Created")] as any };
     const txHash = keccak256(toHex("tx")) as Hex;
-    const deps = { repo, verify, getReceipt: async () => receipt, escrow: ESCROW };
+    const effects: string[] = [];
+    const deps = { repo, verify, getReceipt: async () => receipt, escrow: ESCROW, onConfirmed: async (i: { action: string }) => { effects.push(i.action); } };
     await expect(confirmIntent({ accessToken: "tok-bob", intentId: i.id, userOpHash, txHash }, deps)).rejects.toMatchObject({ status: 403 });
     const c1 = await confirmIntent({ accessToken: "tok-alice", intentId: i.id, userOpHash, txHash }, deps);
     expect(c1.status).toBe("confirmed");
     const c2 = await confirmIntent({ accessToken: "tok-alice", intentId: i.id, userOpHash, txHash }, deps);
     expect(c2.status).toBe("confirmed");
+    expect(effects).toEqual(["create"]); // db effect applied once
     await expect(prep("tok-alice")).rejects.toThrow(/already done/); // no second stake for the same duel
   });
 });
