@@ -24,14 +24,28 @@ export function joinDigest(p: { escrow: Address; duelId: string; who: Address })
   ));
 }
 
-export async function signJoin(p: Parameters<typeof joinDigest>[0], key = process.env.SETTLEMENT_ORACLE_PRIVATE_KEY as Hex | undefined): Promise<Hex> {
+/** the oracle key from env, tolerant of pasted whitespace, quotes or a missing 0x */
+export function oracleKey(): Hex | undefined {
+  const raw = (process.env.SETTLEMENT_ORACLE_PRIVATE_KEY ?? "").trim().replace(/^["']|["']$/g, "").trim();
+  const k = raw.startsWith("0x") ? raw : `0x${raw}`;
+  return /^0x[0-9a-fA-F]{64}$/.test(k) ? (k as Hex) : undefined;
+}
+
+/** public info only: whether the key is set, and the address it signs as */
+export function oracleStatus(): { state: "missing" | "malformed" | "ok"; address?: Address } {
+  if (!(process.env.SETTLEMENT_ORACLE_PRIVATE_KEY ?? "").trim()) return { state: "missing" };
+  const k = oracleKey();
+  return k ? { state: "ok", address: privateKeyToAccount(k).address } : { state: "malformed" };
+}
+
+export async function signJoin(p: Parameters<typeof joinDigest>[0], key = oracleKey()): Promise<Hex> {
   if (!key || !/^0x[0-9a-fA-F]{64}$/.test(key)) throw new Error("settlement oracle key isn't configured on the server");
   return privateKeyToAccount(key).signMessage({ message: { raw: joinDigest(p) } });
 }
 
-export const oracleConfigured = () => /^0x[0-9a-fA-F]{64}$/.test(process.env.SETTLEMENT_ORACLE_PRIVATE_KEY ?? "");
+export const oracleConfigured = () => !!oracleKey();
 
-export async function signSettlement(p: Parameters<typeof settlementDigest>[0], key = process.env.SETTLEMENT_ORACLE_PRIVATE_KEY as Hex | undefined): Promise<Hex> {
+export async function signSettlement(p: Parameters<typeof settlementDigest>[0], key = oracleKey()): Promise<Hex> {
   if (!key || !/^0x[0-9a-fA-F]{64}$/.test(key)) throw new Error("settlement oracle key isn't configured on the server");
   return privateKeyToAccount(key).signMessage({ message: { raw: settlementDigest(p) } });
 }
