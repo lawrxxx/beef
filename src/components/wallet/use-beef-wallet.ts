@@ -23,16 +23,28 @@ export interface ActivityItem {
 }
 
 /** turns raw sdk / network errors into something a person can act on */
+const NETWORK_RE = /network error|failed to fetch|load failed|networkerror/i;
+const rawMessage = (e: unknown) => (e instanceof Error ? e.message : String(e ?? ""));
+
 export function friendlyWalletError(e: unknown): Error {
-  const m = e instanceof Error ? e.message : String(e ?? "");
-  if (/network error|failed to fetch|load failed|networkerror/i.test(m)) return new Error("couldn't reach coinbase. check your connection and try again.");
+  const m = rawMessage(e);
+  if (NETWORK_RE.test(m)) return new Error("couldn't reach coinbase. if you use a vpn, content blocker or private relay, turn it off for beef and try again.");
   if (/unauthori[sz]ed|401|expired|not signed in/i.test(m)) return new Error("your wallet session expired. sign in again.");
   if (/rate|429|too many/i.test(m)) return new Error("too many attempts. wait a minute and try again.");
   if (/invalid.*(otp|code)|otp/i.test(m)) return new Error("that code didn't work. check it or request a new one.");
   if (/user (rejected|cancel)/i.test(m)) return new Error("cancelled. nothing was sent.");
   return e instanceof Error ? e : new Error(m || "something went wrong");
 }
-export const friendly = <T,>(fn: () => Promise<T>) => async () => { try { return await fn(); } catch (e) { throw friendlyWalletError(e); } };
+// a request that got no response at all (dropped connection, blocker, flaky mobile data) is retried
+// once before we give up. the raw error is logged so a failure on someone's phone can be diagnosed.
+export const friendly = <T,>(fn: () => Promise<T>) => async () => {
+  try { return await fn(); } catch (e) {
+    if (!NETWORK_RE.test(rawMessage(e))) throw friendlyWalletError(e);
+    console.warn("[beef wallet] no response from coinbase, retrying once:", e);
+    await new Promise((r) => setTimeout(r, 900));
+    try { return await fn(); } catch (e2) { console.error("[beef wallet] coinbase unreachable:", e2); throw friendlyWalletError(e2); }
+  }
+};
 
 async function api<T>(url: string, body: unknown): Promise<T> {
   const res = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
