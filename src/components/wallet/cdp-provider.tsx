@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useContext, useEffect, useState, type ComponentType, type ReactNode } from "react";
+import { installCdpRoute } from "./cdp-route";
 
 /** public cdp project id (safe in the browser). secrets stay on the server. */
 export const CDP_PROJECT_ID = process.env.NEXT_PUBLIC_CDP_PROJECT_ID ?? "";
@@ -49,6 +50,7 @@ export function CdpProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!cdpEnabled()) return;
     let alive = true;
+    installCdpRoute();
     import("@coinbase/cdp-hooks").then((m) => { if (alive) setProvider(() => m.CDPHooksProvider as unknown as ProviderType); });
     return () => { alive = false; };
   }, []);
