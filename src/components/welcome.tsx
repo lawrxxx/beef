@@ -16,7 +16,7 @@ export function Welcome() {
             "pick two stocks and a friend. you each lock the same stake.",
             "at the deadline, the higher percentage return wins. prices come from chainlink data feeds, worked out by beef's server.",
             "build a record, rivalries and a beef score.",
-            "runs on base sepolia with test usdc. it has no monetary value, so it's all for fun.",
+            "testnet now. mainnet next.",
           ].map((text, i) => (
             <li key={i} className="flex items-baseline gap-4 border-b border-line py-3 text-[15px]">
               <span className="display-cond num w-6 shrink-0 text-[22px] font-bold text-brand-dark">{String(i + 1).padStart(2, "0")}</span>
