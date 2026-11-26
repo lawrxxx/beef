@@ -94,6 +94,7 @@ function Inner({ d }: { d: Duel }) {
       setPending({ intentId: r.intentId, userOpHash: r.userOperationHash });
       setOpen(false);
     } catch (e) {
+      console.error("[beef] duel action failed", action, e);
       const m = e instanceof Error ? e.message : "something went wrong";
       setPhase("error");
       setMsg(/sponsor|paymaster/i.test(m) ? `gas sponsorship was refused, so nothing was sent. ${m}` : m);
@@ -125,7 +126,7 @@ function Inner({ d }: { d: Duel }) {
       ) : action ? (
         <>
           {action === "create" && <p className="mt-2 text-sm text-ink-soft">nobody can accept until your stake is locked.</p>}
-          <button className="btn-primary btn-sm mt-3" disabled={phase === "sending" || !!pending} onClick={() => { setAgree(false); setOpen(true); }}>
+          <button className="btn-primary btn-sm mt-3" disabled={phase === "sending" || !!pending} onClick={() => { setAgree(false); setMsg(null); if (phase === "error") setPhase("idle"); setOpen(true); }}>
             {pending || phase === "confirming" ? <><Loader2 size={15} className="animate-spin" /> confirming on base sepolia…</> : label[action]}
           </button>
           {short && <p className="mt-2 text-xs text-gold">you have {(w.balance.available ?? 0).toFixed(2)} test usdc and need {d.stake}. gas is free, usdc isn't. <Link href="/wallet" className="underline">get test usdc</Link></p>}
@@ -167,6 +168,7 @@ function Inner({ d }: { d: Duel }) {
           </label>
         )}
         {short && <p className="mt-2 text-sm text-loss">not enough test usdc: you have {(w.balance.available ?? 0).toFixed(2)}.</p>}
+        {phase === "error" && msg && <p role="alert" className="mt-3 flex items-start gap-1.5 rounded-xl bg-loss/10 p-3 text-sm text-loss"><AlertTriangle size={15} className="mt-0.5 shrink-0" /><span className="break-words">{msg}</span></p>}
         <p className="mt-3 flex items-center gap-1.5 text-xs text-muted"><Sparkles size={12} className="text-gold" /> test usdc has no monetary value.</p>
         <button className="btn-primary mt-4 w-full" disabled={(moves && (!agree || short)) || phase === "sending"} onClick={go}>
           {phase === "sending" ? <><Loader2 size={16} className="animate-spin" /> sending…</> : "confirm"}

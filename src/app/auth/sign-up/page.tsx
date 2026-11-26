@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { MailCheck } from "lucide-react";
 import { reloadRemote, supabase } from "@/lib/store/store";
-import { AuthFrame, Divider, GoogleButton } from "@/components/auth-ui";
+import { AuthFrame, GoogleButton } from "@/components/auth-ui";
 import { useAction } from "@/components/ui";
 
 /** screen 2: create an account (supabase auth is beef's identity) */
@@ -29,7 +29,6 @@ export default function SignUpPage() {
   return (
     <AuthFrame title="join beef" subtitle="step 1 of 4 · create your account" footer={<>already have an account? <Link href="/auth/sign-in" className="font-semibold text-ink underline">sign in</Link></>}>
       <GoogleButton label="sign up with google" />
-      <Divider />
       <form onSubmit={async (e) => {
         e.preventDefault(); setBusy(true);
         const ok = await run(async () => {

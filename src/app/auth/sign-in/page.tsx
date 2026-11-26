@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { getState, reloadRemote, supabase } from "@/lib/store/store";
-import { AuthFrame, Divider, GoogleButton } from "@/components/auth-ui";
+import { AuthFrame, GoogleButton } from "@/components/auth-ui";
 import { useAction } from "@/components/ui";
 
 export default function SignInPage() {
@@ -17,7 +17,6 @@ export default function SignInPage() {
   return (
     <AuthFrame title="welcome back" subtitle="sign in to settle some arguments." footer={<>new here? <Link href="/auth/sign-up" className="font-semibold text-ink underline">create an account</Link></>}>
       <GoogleButton />
-      <Divider />
       <form className="space-y-3" onSubmit={async (e) => {
         e.preventDefault(); setBusy(true);
         const ok = await run(async () => {

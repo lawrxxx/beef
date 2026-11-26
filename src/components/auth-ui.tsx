@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Logo } from "@/components/shell";
 import { supabase } from "@/lib/store/store";
 import { useAction } from "@/components/ui";
@@ -25,14 +25,26 @@ function GoogleIcon() {
 }
 
 /** google sign-in through supabase auth (needs the google provider enabled in supabase) */
+/** google sign-in plus its "or" divider, shown only when the provider is switched on in supabase */
 export function GoogleButton({ label = "continue with google" }: { label?: string }) {
   const run = useAction();
+  const [enabled, setEnabled] = useState(false);
+  useEffect(() => {
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL, key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    if (!url || !key) return;
+    fetch(`${url}/auth/v1/settings`, { headers: { apikey: key } })
+      .then((r) => r.json()).then((j) => setEnabled(!!j?.external?.google)).catch(() => {});
+  }, []);
+  if (!enabled) return null;
   return (
-    <button type="button" className="btn-outline w-full" onClick={() => run(async () => {
-      const sb = await supabase();
-      const { error } = await sb.auth.signInWithOAuth({ provider: "google", options: { redirectTo: `${window.location.origin}/onboarding` } });
-      if (error) throw new Error(/provider is not enabled/i.test(error.message) ? "google sign-in isn't switched on for beef yet. use email for now." : error.message.toLowerCase());
-    })}><GoogleIcon /> {label}</button>
+    <>
+      <button type="button" className="btn-outline w-full" onClick={() => run(async () => {
+        const sb = await supabase();
+        const { error } = await sb.auth.signInWithOAuth({ provider: "google", options: { redirectTo: `${window.location.origin}/onboarding` } });
+        if (error) throw new Error(error.message.toLowerCase());
+      })}><GoogleIcon /> {label}</button>
+      <Divider />
+    </>
   );
 }
 
