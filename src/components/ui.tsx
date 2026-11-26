@@ -49,10 +49,38 @@ export function Pct({ v, className, digits = 2 }: { v: number | null | undefined
   );
 }
 
-export function SimBadge({ className, label = "simulated" }: { className?: string; label?: string }) {
+export function SimBadge({ className, label = "testnet" }: { className?: string; label?: string }) {
   return (
-    <span className={cx("inline-flex items-center gap-1 rounded-full bg-gold-soft px-2 py-0.5 text-[11px] font-semibold text-gold", className)} title="prices and balances in this demo are simulated, not live market data or real money">
+    <span className={cx("inline-flex items-center gap-1 rounded-full bg-gold-soft px-2 py-0.5 text-[11px] font-semibold text-gold", className)} title="base sepolia testnet: test usdc has no monetary value">
       <FlaskConical size={11} /> {label}
+    </span>
+  );
+}
+
+/** stock prices come only from chainlink data streams */
+export function SourceBadge({ className }: { className?: string }) {
+  return (
+    <span className={cx("inline-flex items-center gap-1 rounded-full bg-[#375BD2]/10 px-2 py-0.5 text-[11px] font-semibold text-[#375BD2]", className)} title="prices: chainlink data streams, 24/5 us equities">
+      chainlink
+    </span>
+  );
+}
+
+/** price + market session + freshness for a chainlink quote. never says "live" for a stale or closed report. */
+export function QuoteLine({ q, className, big }: { q?: import("@/lib/types").Quote; className?: string; big?: boolean }) {
+  if (!q) return <span className={cx("skeleton inline-block h-4 w-16", className)} />;
+  if (q.price == null || q.status === "unavailable" || q.status === "unknown") {
+    return <span className={cx("text-[12px] text-muted", className)} title={q.reason}>{q.status === "unknown" ? "market status unknown" : "price unavailable"}</span>;
+  }
+  const updated = q.lastSeenAt ? new Date(q.lastSeenAt) : null;
+  const tag = q.status === "live" ? q.sessionLabel : q.status === "closed" ? "market closed" : `stale · ${q.sessionLabel}`;
+  return (
+    <span className={cx("inline-flex flex-col", className)}>
+      <span className={cx("num font-semibold", big ? "font-display text-3xl font-bold" : "text-sm")}>${Number(q.price).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+      <span className={cx("text-[11px]", q.status === "live" ? "text-muted" : "text-gold")}>
+        {q.status === "live" && <span className="mr-1 inline-block h-1.5 w-1.5 rounded-full bg-gain align-middle" />}
+        {tag}{updated ? ` · ${updated.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}` : ""}
+      </span>
     </span>
   );
 }

@@ -5,8 +5,7 @@ import { useMemo } from "react";
 import { useBeef } from "@/lib/store/store";
 import { trendingTickers } from "@/lib/derive";
 import { useQuotes } from "@/lib/hooks";
-import { price } from "@/lib/format";
-import { Pct, SimBadge } from "@/components/ui";
+import { QuoteLine, SourceBadge } from "@/components/ui";
 import { DailyBeefCard } from "@/components/daily-beef";
 import { UserRow } from "@/components/social";
 
@@ -25,7 +24,7 @@ export function TrendingList({ limit = 6 }: { limit?: number }) {
             <p className="text-xs text-muted">{mentions} mentions & duels</p>
           </div>
           <div className="text-right">
-            {quotes[ticker] ? <><p className="num text-sm font-semibold">{price(quotes[ticker].price)}</p><Pct v={quotes[ticker].changePct} className="text-xs" /></> : loading ? <div className="skeleton h-8 w-16" /> : null}
+            {quotes[ticker] ? <QuoteLine q={quotes[ticker]} className="items-end" /> : loading ? <div className="skeleton h-8 w-16" /> : null}
           </div>
         </Link>
       ))}
@@ -44,7 +43,7 @@ export function RightRail() {
     <aside className="sticky top-0 hidden h-dvh w-[320px] shrink-0 space-y-5 overflow-y-auto px-5 py-8 xl:block">
       <DailyBeefCard compact />
       <div>
-        <div className="mb-2 flex items-center justify-between"><h2 className="section-title">trending</h2><SimBadge /></div>
+        <div className="mb-2 flex items-center justify-between"><h2 className="section-title">trending</h2><SourceBadge /></div>
         <TrendingList limit={5} />
       </div>
       {suggestions.length > 0 && (
@@ -54,7 +53,7 @@ export function RightRail() {
         </div>
       )}
       <p className="px-1 text-xs leading-relaxed text-faint">
-        beef runs on base sepolia with test usdc, which has no monetary value. stock prices shown are simulated. nothing here is financial advice.{" "}
+        beef runs on base sepolia with test usdc, which has no monetary value. stock prices come from chainlink data streams. nothing here is financial advice.{" "}
         <Link href="/rules" className="underline">how beef works</Link>
       </p>
     </aside>
@@ -71,7 +70,7 @@ export function TrendingStrip() {
       {trending.map(({ ticker }) => (
         <Link key={ticker} href={`/stock/${ticker}`} className="card shrink-0 px-3.5 py-2.5">
           <p className="text-sm font-bold">{ticker}</p>
-          {quotes[ticker] ? <Pct v={quotes[ticker].changePct} className="text-[12px]" /> : <span className="skeleton mt-1 block h-3 w-12" />}
+          <QuoteLine q={quotes[ticker]} />
         </Link>
       ))}
     </div>

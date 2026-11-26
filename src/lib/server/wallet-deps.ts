@@ -1,6 +1,6 @@
 import "server-only";
 import { NextResponse } from "next/server";
-import { createPublicClient, http, keccak256, toHex, type Hex } from "viem";
+import { createPublicClient, http, type Hex } from "viem";
 import { resolveDuelEscrow } from "@/lib/wallet/escrow-resolve";
 import { BEEF_ESCROW_ABI } from "@/lib/wallet/escrow-abi";
 import { CHAIN, ESCROW_ADDRESS } from "@/lib/chain/config";
@@ -8,6 +8,7 @@ import { getAdminSupabase, getServerSupabase } from "@/lib/supabase/server";
 import { SupabaseWalletRepo, type WalletRepo } from "./wallet-repo";
 import { verifyWithCdp, type EndUserVerifier, type VerifiedEndUser } from "./cdp";
 import { WalletError, type DuelForChain } from "./wallet-service";
+import type { Settlement } from "@/lib/types";
 import { clientKey, rateLimit } from "./rate-limit";
 
 /** wallet records live in postgres (written with the service role only) */
@@ -48,7 +49,7 @@ export async function loadDuelForChain(duelId: string): Promise<DuelForChain | n
 function settlementOf(raw: any): DuelForChain["settlement"] {
   const st = Array.isArray(raw) ? raw[0] : raw;
   if (!st) return undefined;
-  return { status: st.status, winners: st.winner_ids ?? [], payloadHash: keccak256(toHex(JSON.stringify(st.payload))) };
+  return { status: st.status, winners: st.winner_ids ?? [], payload: (st.payload as Settlement) ?? null };
 }
 
 /** forwards an approved erc-7677 request to the cdp paymaster. the url is a server secret. */

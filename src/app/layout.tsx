@@ -6,7 +6,7 @@ import { AppShell } from "@/components/shell";
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"),
   title: { default: "beef — put your money where your mouth is", template: "%s · beef" },
-  description: "challenge friends to stock duels, post predictions and build your rep. test usdc on base sepolia, simulated prices.",
+  description: "challenge friends to stock duels, post predictions and build your rep. prices from chainlink data streams, stakes in test usdc on base sepolia.",
   applicationName: "beef",
   manifest: "/manifest.webmanifest",
   appleWebApp: { capable: true, title: "beef", statusBarStyle: "default" },

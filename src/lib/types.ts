@@ -6,50 +6,9 @@ export interface StockAsset {
   ticker: Ticker;
   name: string;
   sector: string;
-  /** anchor price used by the deterministic mock provider */
-  basePrice: number;
-  /** daily volatility used by the mock provider */
-  vol: number;
-  /** drift per session used by the mock provider */
-  drift: number;
-  /** whether a tokenized version is configured on base (informational only) */
-  tokenized?: boolean;
 }
 
-export interface Quote {
-  ticker: Ticker;
-  price: number;
-  /** change vs previous official close, percent */
-  changePct: number;
-  previousClose: number;
-  /** iso utc timestamp of the price */
-  asOf: string;
-  source: string;
-  simulated: boolean;
-  marketOpen: boolean;
-}
-
-export interface ClosePrice {
-  ticker: Ticker;
-  /** session date in market timezone, yyyy-mm-dd */
-  session: string;
-  close: number;
-  /** iso utc timestamp of the official close */
-  timestamp: string;
-  source: string;
-  simulated: boolean;
-  /** when set, data is unusable for settlement */
-  status: "ok" | "missing" | "halted" | "invalid";
-}
-
-export interface CorporateAction {
-  ticker: Ticker;
-  type: "split";
-  /** effective session date (first session trading at the new basis) */
-  session: string;
-  /** e.g. 4 for a 4-for-1 split */
-  ratio: number;
-}
+export type { LiveQuote as Quote } from "@/lib/chainlink/prices";
 
 export type DuelStatus =
   | "pending"
@@ -73,13 +32,22 @@ export interface DuelParticipant {
 export interface PriceSnapshot {
   ticker: Ticker;
   kind: "start" | "end";
+  /** display value; priceE18 is the exact chainlink mid (18 decimals) */
   price: number;
+  priceE18?: string;
   /** split-adjusted price used in the calculation, when different */
   adjustedPrice?: number;
+  adjustedE18?: string;
   session: string;
   timestamp: string;
   source: string;
   simulated: boolean;
+  /** chainlink evidence */
+  streamId?: string;
+  observationsTimestamp?: number;
+  marketStatus?: number;
+  reportHash?: string;
+  verification?: { status: string; method: string; verifier: string; configDigest: string | null; checkedAt: string };
 }
 
 export interface SettlementEntry {
@@ -89,6 +57,22 @@ export interface SettlementEntry {
   endPrice: number;
   returnPct: number;
   rank: number;
+  /** exact values: 18-decimal prices, return as percent × 1e6 */
+  startE18?: string;
+  endE18?: string;
+  returnE6?: string;
+}
+
+/** what a settlement is based on: one chainlink report per stock per end of the window */
+export interface SettlementEvidence {
+  ticker: Ticker;
+  kind: "start" | "end";
+  streamId: string;
+  observationsTimestamp: number;
+  marketStatus: number;
+  midE18: string;
+  reportHash: string;
+  verification: string;
 }
 
 export interface Settlement {
@@ -99,16 +83,21 @@ export interface Settlement {
   winningTicker?: Ticker;
   /** percentage points between first and second */
   marginPct: number;
+  /** exact margin in 0.0001 percentage points */
+  marginE4?: string;
   entries: SettlementEntry[];
   explanation: string;
   calculationVersion: string;
-  methodology: "percent_return_official_close";
+  methodology: string;
   source: string;
   simulated: boolean;
   startSession: string;
   endSession: string;
   settledAt: string;
   issues: string[];
+  /** the comparison window: both stocks use exactly these two timestamps (unix seconds) */
+  window?: { startSession: string; endSession: string; startTimestamp: number; endTimestamp: number };
+  evidence?: SettlementEvidence[];
 }
 
 export interface AuditLog {
@@ -141,6 +130,8 @@ export interface Duel {
   startSnapshots: PriceSnapshot[];
   endSnapshots: PriceSnapshot[];
   settlement?: Settlement;
+  /** base sepolia transaction that paid out (settle) or refunded the escrow */
+  settleTx?: string;
   /** escrow state recorded from verified onchain events */
   escrowState?: "unfunded" | "funded" | "active" | "settled" | "refunded";
   communityId?: string;
@@ -151,7 +142,7 @@ export interface Duel {
 }
 
 export interface DuelTerms {
-  methodology: "percent_return_official_close";
+  methodology: string;
   provider: string;
   marketTimezone: "America/New_York";
   priceRule: string;

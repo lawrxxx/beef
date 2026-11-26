@@ -370,7 +370,7 @@ function NewDuelInner() {
           </div>
           <label className="card flex cursor-pointer items-start gap-3 p-4">
             <input type="checkbox" className="mt-1 h-5 w-5 accent-[#1D1D1F]" checked={agree} onChange={(e) => setAgree(e.target.checked)} />
-            <span className="text-sm text-ink-soft">i agree to these terms. once everyone's in they can't be changed. stakes are <b>test usdc on base sepolia</b>, stock prices are simulated, and this is entertainment, not investment advice.</span>
+            <span className="text-sm text-ink-soft">i agree to these terms. once everyone's in they can't be changed. stakes are <b>test usdc on base sepolia</b>, stock prices come from chainlink data streams, and this is entertainment, not investment advice.</span>
           </label>
         </div>
       )}

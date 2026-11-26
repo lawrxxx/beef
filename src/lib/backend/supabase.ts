@@ -33,6 +33,9 @@ function mapDuel(r: any): Duel {
       .map((s: any) => ({
         ticker: s.ticker, kind, price: n(s.price), adjustedPrice: s.adjusted_price == null ? undefined : n(s.adjusted_price),
         session: s.session, timestamp: new Date(s.price_timestamp).toISOString(), source: s.source, simulated: s.simulated,
+        priceE18: s.price_e18 != null ? String(s.price_e18) : undefined, adjustedE18: s.adjusted_e18 != null ? String(s.adjusted_e18) : undefined,
+        streamId: s.stream_id ?? undefined, observationsTimestamp: s.observations_ts != null ? Number(s.observations_ts) : undefined,
+        marketStatus: s.market_status ?? undefined, reportHash: s.report_hash ?? undefined, verification: s.verification ?? undefined,
       }));
   const settlement = one(r.duel_settlements)?.payload as Settlement | undefined;
   const terms: DuelTerms = {
@@ -55,7 +58,7 @@ function mapDuel(r: any): Duel {
     activatedAt: r.activated_at ? new Date(r.activated_at).toISOString() : undefined,
     startSnapshots: snaps("start"), endSnapshots: snaps("end"),
     settlement: settlement ?? undefined,
-    escrowState: r.escrow_state ?? "unfunded",
+    escrowState: r.escrow_state ?? "unfunded", settleTx: r.settle_tx ?? undefined,
     communityId: r.community_id ?? undefined, featured: r.featured, title: r.title ?? undefined, terms,
   };
 }

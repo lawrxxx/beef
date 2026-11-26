@@ -8,6 +8,8 @@ import {
 } from "@/lib/wallet/calls";
 import { checkCalls, checkLimits, defaultPolicy, type SponsorshipPolicy } from "@/lib/wallet/policy";
 import { BEEF_ESCROW_ABI } from "@/lib/wallet/escrow-abi";
+import { AttestationError, settlementAttestation } from "@/lib/chainlink/attestation";
+import type { Settlement } from "@/lib/types";
 import type { EndUserVerifier } from "./cdp";
 import { ConflictError, type IntentAction, type WalletIntent, type WalletLink, type WalletRepo } from "./wallet-repo";
 
@@ -68,7 +70,7 @@ export interface DuelForChain {
   /** escrow state as recorded from verified onchain events */
   escrowState?: "unfunded" | "funded" | "active" | "settled" | "refunded";
   /** present once beef's settlement service has a final result */
-  settlement?: { status: "settled" | "draw" | "needs_verification"; winners: string[]; payloadHash: Hex };
+  settlement?: { status: "settled" | "draw" | "needs_verification"; winners: string[]; payload: Settlement | null };
 }
 
 export interface PrepareDeps {
@@ -158,9 +160,23 @@ export async function prepareIntent(
       if (!l) throw new WalletError("a winner hasn't linked a wallet", 409);
       winners.push(l.smartAccount);
     }
+    // the attestation binds the payout to every participant, stream, price, timestamp and report
+    const participants: { userId: string; ticker: string; wallet: Address }[] = [];
+    for (const x of duel.participants) {
+      const l = x.userId ? await deps.repo.getLinkByUser(x.userId) : null;
+      if (!l) throw new WalletError("every participant needs a linked wallet before the payout", 409);
+      participants.push({ userId: x.userId, ticker: x.ticker, wallet: l.smartAccount });
+    }
+    if (!st.payload) throw new WalletError("the settlement record is missing", 409);
+    let settlementHash: Hex;
+    try {
+      settlementHash = settlementAttestation({ duelKey: duelIdToBytes32(duel.id), settlement: st.payload, participants, winnerWallets: winners }).hash;
+    } catch (e) {
+      throw new WalletError(e instanceof AttestationError ? e.message : "couldn't build the settlement attestation", 409);
+    }
     const th = termsHash({ duelId: duel.id, stake: duel.stake, tickers: duel.participants.map((x) => x.ticker), deadline: duel.deadline, calculationVersion: duel.calculationVersion, methodology: duel.methodology });
-    const oracleSig = await deps.sign({ escrow, duelId: duel.id, termsHash: th, winners, settlementHash: st.payloadHash });
-    calls = buildSettleCalls({ escrow, duelId: duel.id, winners, settlementHash: st.payloadHash, oracleSig });
+    const oracleSig = await deps.sign({ escrow, duelId: duel.id, termsHash: th, winners, settlementHash });
+    calls = buildSettleCalls({ escrow, duelId: duel.id, winners, settlementHash, oracleSig });
   } else {
     calls = buildRefundCalls({ escrow, duelId: duel.id });
   }

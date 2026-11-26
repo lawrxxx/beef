@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getMarketProvider } from "@/lib/market";
+import { chainlinkPrices } from "@/lib/server/chainlink";
 import { lockStartPrices, settleDuel } from "@/lib/settlement/service";
 import { getAdminSupabase } from "@/lib/supabase/server";
 import { SupabaseSettlementRepository } from "@/lib/supabase/settlement-repo";
@@ -20,11 +20,14 @@ export async function GET(req: Request) {
   if (!db) return NextResponse.json({ error: "no database configured" }, { status: 503 });
 
   const now = new Date();
-  const provider = getMarketProvider();
   const repo = new SupabaseSettlementRepository(db);
   const report = { locked: 0, settled: 0, paused: 0, expired: 0, errors: [] as string[] };
 
   await db.from("duels").update({ status: "expired" }).eq("status", "pending").lt("invite_expires_at", now.toISOString());
+
+  // prices only ever come from chainlink; without it nothing locks or settles (and nothing is guessed)
+  const provider = chainlinkPrices();
+  if (!provider) return NextResponse.json({ ...report, error: "chainlink data streams isn't configured, so no prices were locked or settled" }, { status: 503 });
 
   // accept_duel only marks a duel accepted; the lock close is computed here from the
   // acceptance time (lockStartPrices waits if that close hasn't happened yet)

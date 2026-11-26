@@ -8,10 +8,12 @@ const RULES: [string, string][] = [
   ["identical returns (to 0.0001 pts)", "draw, stakes returned"],
   ["deadline on a weekend or holiday", "last official close at or before the deadline. if that isn't after the price lock, the next trading session"],
   ["early-close days", "the 1:00pm et official close is used"],
-  ["missing price data", "settlement pauses. no winner until data is available"],
-  ["invalid data or a trading halt", "settlement pauses for verification"],
-  ["stock split during the duel", "the starting price is adjusted by the split ratio"],
-  ["delayed data", "settlement stays pending verification"],
+  ["price source", "chainlink data streams, 24/5 us equities regular-hours stream (mid price)"],
+  ["exact price time", "the report observed one second before the official close"],
+  ["report not verified by chainlink's verifier", "settlement pauses for verification"],
+  ["missing report, market status not regular hours, or a stale mid (possible halt)", "settlement pauses. no winner until it's resolved"],
+  ["crossed or unusually wide quote", "settlement pauses for verification"],
+  ["stock split during the duel", "the starting price is adjusted by the recorded split ratio. an unexplained move of 40% or more pauses settlement"],
 ];
 
 export default function RulesPage() {
@@ -42,8 +44,9 @@ export default function RulesPage() {
         <h2 className="text-lg font-bold">timing</h2>
         <ul className="mt-2 list-disc space-y-1.5 pl-5 text-[15px] text-ink-soft">
           <li>both sides agree to the exact same terms. once everyone's in, terms can't be edited.</li>
-          <li><b>starting prices</b> lock at the first official market close after the last acceptance. nobody can enter a duel knowing today's move.</li>
-          <li><b>ending prices</b> are the official close on the deadline session.</li>
+          <li><b>starting prices</b> lock at the first official market close after the last acceptance: the chainlink regular-hours mid one second before that close. nobody can enter a duel knowing today's move.</li>
+          <li><b>ending prices</b> use the same rule on the deadline session.</li>
+          <li>live prices during a duel switch between chainlink's regular, extended and overnight streams by market status. they're for display only and never decide the result.</li>
           <li>both stocks always use exactly the same window.</li>
           <li>times are stored in utc and shown in new york time (et), the market's timezone.</li>
         </ul>
@@ -67,7 +70,7 @@ export default function RulesPage() {
       <section id="risk" className="card mt-4 border-gold/40 p-5">
         <h2 className="text-lg font-bold">risk disclosure & eligibility</h2>
         <ul className="mt-2 list-disc space-y-1.5 pl-5 text-[15px] text-ink-soft">
-          <li>stakes are <b>test usdc on base sepolia</b>, a testnet token with no monetary value, held by the beef escrow contract. stock prices are <b>simulated</b> and not live. no real money moves.</li>
+          <li>stakes are <b>test usdc on base sepolia</b>, a testnet token with no monetary value, held by the beef escrow contract. stock prices come from <b>chainlink data streams</b> (24/5 us equities); settlement uses regular-hours reports verified with chainlink's verifier on base sepolia. no real money moves.</li>
           <li>beef is entertainment, not investment advice. past results don't predict future returns.</li>
           <li>you must be 18 or older. real-money features, if ever offered, will only be available where they are legal and after identity and eligibility checks.</li>
           <li>real-money staking and tokenized stock transfers stay disabled until regulatory requirements, asset permissions, custody and oracle verification are confirmed.</li>

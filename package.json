@@ -16,6 +16,7 @@
     "contracts:deploy": "node scripts/deploy-escrow.mjs"
   },
   "dependencies": {
+    "@chainlink/data-streams-sdk": "2.0.0",
     "@coinbase/cdp-core": "0.0.130",
     "@coinbase/cdp-hooks": "0.0.130",
     "@coinbase/cdp-sdk": "1.61.0",

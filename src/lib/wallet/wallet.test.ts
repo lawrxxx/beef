@@ -7,6 +7,8 @@ import {
   SMART_WALLET_ABI, buildJoinCalls, buildCreateDuelCalls, OPEN_SLOT, callsHash, decodeSmartAccountCallData, duelIdToBytes32, usdcUnits, type Call,
 } from "./calls";
 import { checkCalls, checkLimits, defaultPolicy } from "./policy";
+import { settlementAttestation } from "@/lib/chainlink/attestation";
+import type { Settlement } from "@/lib/types";
 import { BEEF_ESCROW_ABI } from "./escrow-abi";
 import { MemoryWalletRepo } from "@/lib/server/wallet-repo";
 import { mapEndUser, type VerifiedEndUser } from "@/lib/server/cdp";
@@ -202,22 +204,54 @@ describe("intents", () => {
   });
 });
 
+// a settled result as the chainlink settlement service stores it (fixture values)
+const ev = (ticker: string, kind: "start" | "end", mid: string, ts: number) => ({ ticker, kind, streamId: "0x000b" + "1".repeat(60), observationsTimestamp: ts, marketStatus: 2, midE18: mid, reportHash: keccak256(toHex(`${ticker}${kind}`)), verification: "verified" });
+const settledPayload = (over: Partial<Settlement> = {}): Settlement => ({
+  duelId: DUEL, status: "settled", winners: ["alice"], marginPct: 2, marginE4: "20000", explanation: "", calculationVersion: "pct-return-v2",
+  methodology: "chainlink_regular_hours_mid_v1", source: "chainlink-data-streams", simulated: false, startSession: "2026-12-01", endSession: "2026-12-04",
+  settledAt: "2026-12-05T00:00:00Z", issues: [], window: { startSession: "2026-12-01", endSession: "2026-12-04", startTimestamp: 1764622799, endTimestamp: 1764881999 },
+  entries: [
+    { userId: "alice", ticker: "NVDA", rank: 1, startPrice: 180, endPrice: 189, returnPct: 5, startE18: "180000000000000000000", endE18: "189000000000000000000", returnE6: "5000000" },
+    { userId: "bob", ticker: "AMD", rank: 2, startPrice: 250, endPrice: 257.5, returnPct: 3, startE18: "250000000000000000000", endE18: "257500000000000000000", returnE6: "3000000" },
+  ],
+  evidence: [ev("NVDA", "start", "180000000000000000000", 1764622799), ev("NVDA", "end", "189000000000000000000", 1764881999), ev("AMD", "start", "250000000000000000000", 1764622799), ev("AMD", "end", "257500000000000000000", 1764881999)],
+  ...over,
+});
+
 describe("payout intents", () => {
-  it("signs the final result on the server and builds a sponsorable settle call", async () => {
+  it("signs the chainlink settlement attestation on the server and builds a sponsorable settle call", async () => {
     await linkBoth();
     const { signSettlement } = await import("@/lib/server/oracle");
-    const settled = { ...duel, status: "completed", settlement: { status: "settled" as const, winners: ["alice"], payloadHash: keccak256(toHex("p")) as Hex } };
+    const settled = { ...duel, status: "completed", settlement: { status: "settled" as const, winners: ["alice"], payload: settledPayload() } };
     const key = keccak256(toHex("oracle-test-key"));
     const r = await prepareIntent({ accessToken: "tok-bob", action: "settle", duelId: DUEL }, { verify, repo, loadDuel: async () => settled, escrow: ESCROW, sign: (p) => signSettlement(p, key) });
     expect(r.intent.calls).toHaveLength(1);
     expect(r.intent.amountUnits).toBe("0");
     expect(checkCalls(r.intent.calls.map((c) => ({ to: getAddress(c.to), value: BigInt(c.value), data: c.data as Hex })), policy).ok).toBe(true);
+    // the settle call carries exactly the attestation hash over the chainlink evidence
+    const call = decodeFunctionData({ abi: BEEF_ESCROW_ABI, data: r.intent.calls[0].data as Hex });
+    const want = settlementAttestation({ duelKey: duelIdToBytes32(DUEL), settlement: settledPayload(), participants: [{ userId: "alice", ticker: "NVDA", wallet: ALICE_SA }, { userId: "bob", ticker: "AMD", wallet: BOB_SA }], winnerWallets: [ALICE_SA] }).hash;
+    expect((call.args as any)[2]).toBe(want);
   });
-  it("refuses payouts before a verified result or without the oracle key", async () => {
+  it("the attestation changes if any bound value changes", () => {
+    const parts = [{ userId: "alice", ticker: "NVDA", wallet: ALICE_SA }, { userId: "bob", ticker: "AMD", wallet: BOB_SA }];
+    const h = (s: Settlement, w = [ALICE_SA]) => settlementAttestation({ duelKey: duelIdToBytes32(DUEL), settlement: s, participants: parts, winnerWallets: w }).hash;
+    const base = h(settledPayload());
+    const tweaked = settledPayload(); tweaked.entries[0].endE18 = "189000000000000000001";
+    expect(h(tweaked)).not.toBe(base);
+    expect(h(settledPayload({ calculationVersion: "pct-return-v3" }))).not.toBe(base);
+    expect(h(settledPayload(), [BOB_SA])).not.toBe(base);
+    expect(() => h(settledPayload({ evidence: [] }))).toThrow(/no chainlink evidence/);
+    const unverified = settledPayload(); unverified.evidence![1].verification = "reverted";
+    expect(() => h(unverified)).toThrow(/no verified end report/);
+  });
+  it("refuses payouts before a verified result, without evidence, or without the oracle key", async () => {
     await linkBoth();
-    const paused = { ...duel, status: "awaiting_verification", settlement: { status: "needs_verification" as const, winners: [], payloadHash: "0x00" as Hex } };
+    const paused = { ...duel, status: "awaiting_verification", settlement: { status: "needs_verification" as const, winners: [], payload: null } };
     await expect(prepareIntent({ accessToken: "tok-alice", action: "settle", duelId: DUEL }, { verify, repo, loadDuel: async () => paused, escrow: ESCROW, sign: async () => "0x" })).rejects.toThrow(/isn't settled yet/);
-    const done = { ...duel, status: "completed", settlement: { status: "draw" as const, winners: [], payloadHash: keccak256("0x01") } };
+    const legacy = { ...duel, status: "completed", settlement: { status: "settled" as const, winners: ["alice"], payload: settledPayload({ evidence: undefined }) } };
+    await expect(prepareIntent({ accessToken: "tok-alice", action: "settle", duelId: DUEL }, { verify, repo, loadDuel: async () => legacy, escrow: ESCROW, sign: async () => "0x" })).rejects.toThrow(/no chainlink evidence/);
+    const done = { ...duel, status: "completed", settlement: { status: "draw" as const, winners: [], payload: settledPayload({ status: "draw", winners: [] }) } };
     await expect(prepareIntent({ accessToken: "tok-alice", action: "settle", duelId: DUEL }, { verify, repo, loadDuel: async () => done, escrow: ESCROW })).rejects.toMatchObject({ status: 503 });
   });
 });

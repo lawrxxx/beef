@@ -11,7 +11,7 @@ import { usd } from "@/lib/format";
 import { dailyMatchup } from "@/lib/daily";
 import { Welcome } from "@/components/welcome";
 import { shareLink } from "@/components/share";
-import { Avatar, EmptyState, Section, SimBadge, Tabs } from "@/components/ui";
+import { Avatar, EmptyState, Section, SourceBadge, Tabs } from "@/components/ui";
 import { Composer } from "@/components/composer";
 import { PostCard, UserRow } from "@/components/social";
 import { DuelCard } from "@/components/duel-card";
@@ -138,7 +138,7 @@ export default function HomePage() {
               {/* 4. trending + 5. suggested people, inline on mobile (the desktop rail shows them) */}
               {tab === "foryou" && i === 1 && (
                 <div className="xl:hidden">
-                  <div className="mb-2 flex items-center justify-between"><h2 className="section-title">trending stocks</h2><SimBadge /></div>
+                  <div className="mb-2 flex items-center justify-between"><h2 className="section-title">trending stocks</h2><SourceBadge /></div>
                   <TrendingStrip />
                 </div>
               )}
@@ -164,7 +164,7 @@ export default function HomePage() {
           )}
         </div>
       )}
-      <Link href="/rules" className="mt-4 flex items-center justify-center gap-1 text-xs text-muted">how beef works · test usdc on base sepolia, simulated prices <ArrowRight size={12} /></Link>
+      <Link href="/rules" className="mt-4 flex items-center justify-center gap-1 text-xs text-muted">how beef works · chainlink prices, test usdc on base sepolia <ArrowRight size={12} /></Link>
     </div>
   );
 }

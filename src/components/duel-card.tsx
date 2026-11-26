@@ -8,7 +8,7 @@ import { useBeef } from "@/lib/store/store";
 import { livePerformance, useNow, useQuotes, userById } from "@/lib/hooks";
 import { STATUS_LABEL, STATUS_STYLE } from "@/lib/derive";
 import { countdown, cx, usd } from "@/lib/format";
-import { Avatar, Pct } from "@/components/ui";
+import { Avatar, Pct, QuoteLine } from "@/components/ui";
 
 export function StatusPill({ d }: { d: Duel }) {
   return (
@@ -75,6 +75,7 @@ export function DuelCard({ d, compact }: { d: Duel; compact?: boolean }) {
               <div className={cx("mt-1.5 text-[17px]", !group && i === 1 && "text-right")}>
                 {d.status === "active" || done ? <Pct v={p.ret} /> : <span className="text-sm text-faint">—</span>}
               </div>
+              {live && !compact && <QuoteLine q={p.quote} className={cx("mt-0.5", !group && i === 1 && "items-end")} />}
             </div>
           );
           if (!group && i === 1) return [<span key="vs" className="px-1 text-xs font-bold text-faint">vs</span>, side];

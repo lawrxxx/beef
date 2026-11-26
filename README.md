@@ -4,7 +4,7 @@
 
 beef is a mobile-first social stock competition app. friends challenge each other over which stock will perform better, post predictions, build rivalries and climb a leaderboard. it's an installable pwa (iphone + android), built with next.js, supabase and coinbase developer platform embedded wallets on **base sepolia**.
 
-> **stakes are real base sepolia test usdc, held by an escrow contract. test usdc has no monetary value.** stock prices are still simulated. there's no mainnet anywhere in the app, and real money stays off.
+> **stakes are real base sepolia test usdc, held by an escrow contract. test usdc has no monetary value.** stock prices come from chainlink data streams. there's no mainnet anywhere in the app, and real money stays off.
 
 there is **no demo mode** and no seeded people. every user, post, follow and duel comes from a real registered account, and every balance and transaction is read from base sepolia. without supabase configured, the app shows a setup screen instead of fake content.
 
@@ -62,8 +62,8 @@ copy `.env.example` → `.env.local`.
 | `SETTLEMENT_ORACLE_PRIVATE_KEY` | for stakes | **server only**. signs joins and results; its address is the escrow's oracle |
 | `BASE_SEPOLIA_RPC_URL` | no | server rpc (default `https://sepolia.base.org`) |
 | `SPONSOR_PER_USER_DAILY` / `SPONSOR_GLOBAL_DAILY` | no | sponsorship limits (default 10 / 500 operations a day) |
-| `MARKET_DATA_PROVIDER` / `NEXT_PUBLIC_MARKET_DATA_PROVIDER` | no | `mock` (default) · `polygon` · `finnhub` · `alphavantage` |
-| `POLYGON_API_KEY` / `FINNHUB_API_KEY` / `ALPHAVANTAGE_API_KEY` | with provider | server only |
+| `CHAINLINK_DS_API_KEY` / `CHAINLINK_DS_USER_SECRET` | for prices | **server only**. chainlink data streams credentials. without them, no prices, locks or settlements |
+| `CHAINLINK_DS_NETWORK` | no | `testnet` (default, verifiable on base sepolia) or `mainnet` |
 | `CRON_SECRET` | prod | bearer token for `/api/cron/settle` (vercel sends it automatically) |
 | `NEXT_PUBLIC_CDP_MOCK` | no | `true` = the cdp sdk's mock mode for local ui work (no real wallet) |
 
@@ -90,36 +90,48 @@ copy `.env.example` → `.env.local`.
 | auth, profiles, social, notifications, realtime | ✅ tested end to end with two real accounts against a local supabase (34 checks, `e2e/supabase.js`) |
 | escrow contract | ✅ tested on a local evm with chain id 84532 (create with open slots, oracle-authorised joins, stranger rejection, payout once, draw, group split, refund window). **not yet deployed** to base sepolia (needs a funded deployer). unaudited |
 | cdp wallets + sponsored gas | ✅ unit-tested (policy, paymaster proxy, intents, receipt verification, identity binding). not yet exercised against a live cdp project from this environment |
-| market data | still simulated. the polygon / finnhub / alpha vantage adapters are written but untested without api keys |
+| stock prices | chainlink data streams only. retrieval, decoding, session switching and settlement are unit-tested on synthetic v11 fixtures. **not yet run against chainlink's live api**: needs data streams credentials |
 | data loading | the client loads the latest few hundred rows of each table; it needs pagination for real traffic |
 | rate limiting | in-memory per server instance |
 
-## market data
+## stock prices: chainlink data streams
 
-`src/lib/market/` holds a provider abstraction (`MarketDataProvider`) with:
+beef's only price source is **chainlink data streams, 24/5 us equities** (rwa advanced v11 schema), via the official sdk `@chainlink/data-streams-sdk@2.0.0`. the simulated provider and the polygon / finnhub / alpha vantage adapters are gone. supported tickers: NVDA, AAPL, TSLA, MSFT, AMZN, GOOGL, META. without data streams credentials the app shows "price unavailable" and nothing locks or settles. nothing is estimated.
 
-- `mock.ts`: deterministic simulated prices (same ticker + session ⇒ same price, always), a mean-reverting walk, scripted scenarios for the reference duels, a simulated 4:1 avgo split and a simulated smci trading halt.
-- `http-providers.ts`: polygon (snapshot, `v1/open-close`, splits), finnhub (quote, daily candles), alpha vantage (global quote, daily series). keys stay server-side.
-- `calendar.ts`: nyse sessions 2025–2027, holidays, 1pm early closes, dst-safe et ↔ utc conversion.
+**what was checked in chainlink's docs (2026-11-26)**
+- each stock has three v11 streams (regular, extended, overnight). the regular stream's `marketStatus` (0 unknown · 1 pre · 2 regular · 3 post · 4 overnight · 5 closed) decides which one to read.
+- base sepolia (84532) has a data streams **verifier proxy, `0x8Ac491b7c118a0cdcF048e0f707247fD8C9575f9`**, from chainlink's supported-networks table. onchain it answers `typeAndVersion() = "VerifierProxy 2.0.0"`, `s_accessController = 0x0` (anyone may call) and `s_feeManager = 0x72790f9eB82db492a7DDb6d2af22A270Dcc3Db64`. chainlink's docs say every report type, v11 included, shares these verifier addresses.
+- stream ids come from chainlink's rwa stream directory (`src/lib/chainlink/directory.ts`, testnet and mainnet "-production" entries). they're a **cross-check only**.
 
-every price in the ui is labelled *simulated* when it comes from the mock provider.
+**discovery** (`POST /api/chainlink/discover`, bearer `CRON_SECRET`): calls the sdk's `listFeeds()` (`GET /api/v1/feeds`) and keeps a ticker only if its regular, extended and overnight streams are all accessible, are v11, are named for that ticker and session, and match chainlink's directory exactly. results go to `price_streams`, and a ticker missing any stream is unavailable. `GET /api/chainlink/status` shows what's configured.
 
-## settlement methodology
+**live prices** (`/api/market/quotes`, display only): the latest regular-hours report, then the extended or overnight stream when `marketStatus` says so, showing the `mid`. a quote shows as **live** only if the mid updated within 5 minutes. otherwise it's **stale**. **closed** shows the last regular-hours mid, labelled as closed. **unknown** shows no price. zero or crossed quotes are rejected. the duel page shows price, return, session, last update and the chainlink source.
 
-**return = ((ending price − starting price) ÷ starting price) × 100.** the higher percentage return wins. share prices and dollar gains never matter.
+**settlement methodology `chainlink_regular_hours_mid_v1`** (`src/lib/chainlink/prices.ts`, `src/lib/settlement/service.ts`)
+- start = the lock session (first close after everyone joined); end = the deadline session (weekends and holidays roll back, early closes use 1pm).
+- for each stock: `getReportByTimestamp(regularStream, close − 1s)`, decoded with the sdk's `decodeReport`. both stocks use the same two timestamps.
+- a report counts only if:
+  - it's observed at that timestamp
+  - `marketStatus = 2`
+  - the mid is positive
+  - the quote isn't crossed or wider than 2%
+  - the mid updated within 120 s (a halt or outage shows up here)
+  - **chainlink's verifier proxy accepts its signatures**
+- starting snapshots are locked at activation and are append-only.
+- splits come from the `corporate_actions` table and are applied exactly (start × den / num). a move of 40% or more with no recorded action pauses settlement as a possible unrecorded split.
+- return = (end − start) / start × 100 in bigint (`pct-return-v2`), compared at 0.0001 points, so equal returns draw.
+- any failed check → `needs_verification` with reasons and no winner. one settlement per duel (insert-if-absent), with every step in the audit log.
 
-- **start price**: official close of the first session that closes after the last participant accepts. nobody can join a duel already knowing today's move.
-- **end price**: official close of the deadline session. weekend/holiday deadlines use the last close at or before the deadline; if that isn't after the lock session, the next trading session.
-- both stocks use exactly the same window. timestamps are stored in utc, shown in et.
-- returns are compared at 4 decimals of a percentage point; equal ⇒ draw (stakes returned). group beefs rank everyone; ties for first share the pot.
-- splits between lock and end adjust the starting price by the split ratio.
-- missing, halted, invalid, mistimed or future-dated closes, and failed or timed-out provider requests ⇒ `needs_verification`; **no winner is declared** and nothing is recorded until data is reliable. the next run retries.
+**verification, stated exactly**: beef calls chainlink's `VerifierProxy.verify(fullReport, "")` on base sepolia as a **read-only `eth_call`**. chainlink's contract checks the DON signatures and returns the verified report, and beef checks it matches the decoded one, but **no verification transaction is recorded**. first `getVerifier(configDigest)` confirms the report's DON config is registered. results are stored with each report as `chainlink_verifier_proxy_eth_call`. the verifier has a fee manager set; per chainlink's docs billing is subscription-based with empty fee metadata, but that's unconfirmed until a real signed report is run. a revert means not verified and pauses settlement. there's no setting that skips verification.
 
-the pure engine is `src/lib/settlement/engine.ts` (`pct-return-v1`). the service (`service.ts`) runs the 11 steps (deadline check → fetch → validate source → verify timestamps → adjust splits → compute → compare → decide → record-if-absent → status → notify), is idempotent (insert-if-absent; concurrent calls store exactly one result) and writes an audit log. the browser can only *ask* to settle: it never sends prices, and in supabase mode the server loads the duel from the database and checks that the caller is a participant.
+**escrow binding**: the payout's `settlementHash` is `settlementAttestation()` (`src/lib/chainlink/attestation.ts`): one keccak over duel id, participant wallets, tickers, stream ids, exact start and end prices, observation timestamps, signed report hashes, comparison window, winners or draw, calculation version and methodology. beef's settlement signer signs it with chain id, escrow, duel, terms hash and winners, and `BeefEscrow.settle` checks that signature, pays once and rejects replays. **this signature is beef's, not chainlink's.** chainlink's guarantee is the verified reports, which anyone can re-check from `price_reports.full_report`. no contract change was needed. the escrow doesn't call the verifier itself, which would be a later step once fees and gas are confirmed with real reports.
 
-tests: `npm test` (79 tests). settlement: 27. wallets: 44 (calls, calldata decoding, every sponsorship rule, linking, intents, paymaster allow/refuse paths, receipt checks). escrow contract: 8, on a local evm with chain id 84532 (create/accept, exact approvals, bad creates, oracle-only payouts, replay, draws, group splits, refunds, and the server's oracle signature accepted onchain). wallet db: 3 more against real postgres when `WALLET_DB_TEST_*` env vars are set. the settlement suite covers the brief's examples, both rise / both fall / one up one down / flat / identical, dollar gain vs percent, group ties, dst and holidays, missing data, provider outages, trading halts, split adjustment, the shared comparison window, idempotency and concurrent settlement.
-
-end-to-end: `npm run e2e` (playwright, against a running server; set `BASE_URL` for a deployment) drives 45 checks on a phone viewport: the full create → accept → lock → settle loop, double-tap protection, accept/decline, group beefs, rematch prefill, comments, reactions, follows, trophy cards, notifications, every leaderboard period × category, wallet activity, profiles, communities, sign out / sign up / onboarding, and cross-device invite links. it also crawls every route for console errors and horizontal overflow, and checks the service worker and offline fallback.
+**storage** (`supabase/migrations/20261130000000_chainlink.sql`)
+- `price_streams`: verified config.
+- `price_reports`: every signed report a lock or settlement used, with metadata and the verification result. append-only, service-role only.
+- `corporate_actions`
+- snapshot columns: price_e18, stream_id, observations_ts, market_status, report_hash, verification
+- `duels.settle_tx`
 
 ## wallets & sponsored gas (base sepolia only)
 
@@ -210,7 +222,8 @@ src/
   components/             shell, cards, social, welcome, onboarding, share cards, install prompt
     wallet/               cdp provider, wallet hook, wallet panel, onboarding wallet steps, duel funding
   lib/
-    market/               provider abstraction, mock + http providers, market calendar
+    market/               supported tickers + market calendar (holidays, early closes, dst)
+    chainlink/            data streams config, directory cross-check, discovery, v11 decoding, market status, prices, verifier, attestation
     settlement/           pure engine, settlement service, tests
     chain/                base sepolia constants (chain id, rpc, explorer, usdc, faucet)
     wallet/               call builders, sponsorship policy, escrow abi, tests
@@ -225,4 +238,4 @@ e2e/                      two-user browser test
 
 ## responsible design
 
-18+ confirmation at sign-up and onboarding, country capture for future eligibility checks, explicit terms checkbox before creating or accepting any duel, configurable stake limits (1–1000 test usdc by default), a beef score that ignores stake size, clear "simulated" labels on every price and balance, a full risk disclosure at `/rules#risk`, and rate limits on duel, comment, post and settlement actions.
+18+ confirmation at sign-up and onboarding, country capture for future eligibility checks, explicit terms checkbox before creating or accepting any duel, configurable stake limits (1–1000 test usdc by default), a beef score that ignores stake size, a chainlink source label and live/stale/closed status on every price, testnet labels on balances, a full risk disclosure at `/rules#risk`, and rate limits on duel, comment, post and settlement actions.

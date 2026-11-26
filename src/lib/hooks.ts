@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { Duel, Quote } from "@/lib/types";
 import { useBeef, type BeefState } from "@/lib/store/store";
 import { computeStats, outcomeFor, ACHIEVEMENTS } from "@/lib/score";
-import { percentReturn } from "@/lib/settlement/engine";
+import { percentReturn, returnE6, returnPctNumber } from "@/lib/settlement/engine";
 
 /** current time, 0 during ssr/hydration so server and client markup match */
 export function useNow(intervalMs = 1000) {
@@ -28,10 +28,10 @@ export function useMounted() {
 type QuoteState = { quotes: Record<string, Quote>; loading: boolean; error: string | null; simulated: boolean; provider: string };
 const quoteCache: Record<string, Quote> = {};
 
-export function useQuotes(tickers: string[], refreshMs = 30_000): QuoteState {
+export function useQuotes(tickers: string[], refreshMs = 15_000): QuoteState {
   const key = Array.from(new Set(tickers)).sort().join(",");
   // initial state never reads the cache: hydration must match the server render
-  const [st, setSt] = useState<QuoteState>({ quotes: {}, loading: tickers.length > 0, error: null, simulated: true, provider: "mock" });
+  const [st, setSt] = useState<QuoteState>({ quotes: {}, loading: tickers.length > 0, error: null, simulated: false, provider: "chainlink-data-streams" });
   useEffect(() => {
     if (!key) { setSt((s) => ({ ...s, loading: false })); return; }
     let alive = true;
@@ -147,10 +147,15 @@ export function livePerformance(d: Duel, quotes: Record<string, Quote>) {
     const end = d.endSnapshots.find((s) => s.ticker === p.ticker);
     const entry = d.settlement?.entries.find((e) => e.ticker === p.ticker);
     const q = quotes[p.ticker];
-    const startPrice = start?.adjustedPrice ?? start?.price;
-    const current = end?.price ?? q?.price;
-    const ret = entry ? entry.returnPct : startPrice && current ? percentReturn(startPrice, current) : null;
-    return { ...p, startPrice: start?.price, adjustedStart: start?.adjustedPrice, current, ret, quote: q };
+    // exact where possible: chainlink 18-decimal prices through bigint maths
+    const startE18 = start?.adjustedE18 ?? start?.priceE18;
+    const usableQuote = q && q.priceE18 && (q.status === "live" || q.status === "stale" || q.status === "closed") ? q : undefined;
+    const currentE18 = end?.priceE18 ?? usableQuote?.priceE18 ?? undefined;
+    const current = end?.price ?? (usableQuote?.price != null ? Number(usableQuote.price) : undefined);
+    const ret = entry ? entry.returnPct
+      : startE18 && currentE18 ? returnPctNumber(returnE6(BigInt(startE18), BigInt(currentE18)))
+        : start && current ? percentReturn(start.adjustedPrice ?? start.price, current) : null;
+    return { ...p, startPrice: start?.price, adjustedStart: start?.adjustedPrice, current, ret, quote: q, startSnap: start, endSnap: end };
   });
 }
 

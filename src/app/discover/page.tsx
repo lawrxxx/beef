@@ -6,7 +6,7 @@ import { Search, X } from "lucide-react";
 import { useBeef } from "@/lib/store/store";
 import { ASSETS } from "@/lib/market/assets";
 import { statsFor, useMounted } from "@/lib/hooks";
-import { PageHeader, Section, SimBadge, Tabs } from "@/components/ui";
+import { PageHeader, Section, SourceBadge, Tabs } from "@/components/ui";
 import { DuelCard } from "@/components/duel-card";
 import { PostCard, UserRow } from "@/components/social";
 import { TrendingList } from "@/components/right-rail";
@@ -71,7 +71,7 @@ export default function DiscoverPage() {
       ) : (
         <div>
           {filter === "all" && <div className="mb-6 xl:hidden"><DailyBeefCard /></div>}
-          {show("stocks") && <Section title="trending stocks" action={<SimBadge />}><TrendingList limit={filter === "stocks" ? 10 : 5} /></Section>}
+          {show("stocks") && <Section title="trending stocks" action={<SourceBadge />}><TrendingList limit={filter === "stocks" ? 10 : 5} /></Section>}
           {show("duels") && (
             <Section title="public duels" action={<Link href="/duel?tab=open" className="text-sm font-semibold text-brand-dark">see all</Link>}>
               <div className="grid gap-3 sm:grid-cols-2">{publicDuels.map((d) => <DuelCard key={d.id} d={d} compact />)}</div>

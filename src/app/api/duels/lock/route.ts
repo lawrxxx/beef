@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getMarketProvider } from "@/lib/market";
+import { chainlinkPrices } from "@/lib/server/chainlink";
 import { lockStartPrices } from "@/lib/settlement/service";
 import { getAdminSupabase } from "@/lib/supabase/server";
 import { saveSnapshots } from "@/lib/server/duel-db";
@@ -11,7 +11,9 @@ export async function POST(req: Request) {
   const ctx = await resolveRequest(req, "lock");
   if (!ctx.ok) return ctx.res;
   if (ctx.duel.status !== "accepted") return NextResponse.json({ error: `duel is ${ctx.duel.status}` }, { status: 409 });
-  const r = await lockStartPrices(ctx.duel, getMarketProvider(), ctx.now);
+  const prices = chainlinkPrices();
+  if (!prices) return NextResponse.json({ error: "chainlink data streams isn't configured, so prices can't be locked" }, { status: 503 });
+  const r = await lockStartPrices(ctx.duel, prices, ctx.now);
   if (r.ok) {
     const db = getAdminSupabase()!;
     await saveSnapshots(db, ctx.duel.id, r.snapshots);

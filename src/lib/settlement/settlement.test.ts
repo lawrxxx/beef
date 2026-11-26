@@ -1,262 +1,196 @@
 import { describe, expect, it } from "vitest";
-import { compareReturns, percentReturn } from "./engine";
-import { InMemorySettlementRepository, lockStartPrices, settleDuel } from "./service";
-import { MockMarketProvider } from "@/lib/market/mock";
-import type { MarketDataProvider } from "@/lib/market/provider";
-import {
-  deadlineOptions, lastCloseAtOrBefore, nextCloseAfter, resolveEndSession, sessionCloseUtc,
-} from "@/lib/market/calendar";
-import type { ClosePrice } from "@/lib/types";
+import { parseUnits } from "viem";
+import { compareReturns, returnE6 } from "./engine";
+import { InMemorySettlementRepository, lockStartPrices, settleDuel, type SettleableDuel } from "./service";
+import { deadlineOptions, lastCloseAtOrBefore, nextCloseAfter, resolveEndSession, sessionCloseUtc } from "@/lib/market/calendar";
+import { BASE_SEPOLIA_VERIFIER_PROXY, type SupportedTicker } from "@/lib/chainlink/config";
+import { ChainlinkPrices, type StreamsApi } from "@/lib/chainlink/prices";
+import type { Verification } from "@/lib/chainlink/verifier";
+import { fixtureReport, fixtureStream } from "@/lib/chainlink/fixtures";
+
+// isolated unit tests. prices are synthetic fixture reports (lib/chainlink/fixtures.ts),
+// never real market data.
 
 const A = "alice", B = "bob";
+const e18 = (v: string) => parseUnits(v, 18);
+const input = (userId: string, ticker: string, start: string, end: string) => ({ userId, ticker, startE18: e18(start), endE18: e18(end) });
 
-describe("percent return", () => {
-  it("matches the brief example", () => {
-    expect(percentReturn(180, 189)).toBeCloseTo(5, 10);
-    expect(percentReturn(250, 257.5)).toBeCloseTo(3, 10);
+describe("percent return (bigint)", () => {
+  it("matches the brief example: (189 − 180) / 180 × 100 = 5%", () => {
+    expect(returnE6(e18("180"), e18("189"))).toBe(5_000_000n);
   });
-  it("rejects invalid prices", () => {
-    expect(() => percentReturn(0, 10)).toThrow();
-    expect(() => percentReturn(NaN, 10)).toThrow();
-    expect(() => percentReturn(10, -1)).toThrow();
+  it("negative returns and invalid prices", () => {
+    expect(returnE6(e18("100"), e18("97.5"))).toBe(-2_500_000n);
+    expect(() => returnE6(0n, e18("1"))).toThrow(RangeError);
+    expect(() => returnE6(e18("1"), -1n)).toThrow(RangeError);
+  });
+  it("no float error: 0.1 → 0.3 is exactly +200%", () => {
+    expect(returnE6(e18("0.1"), e18("0.3"))).toBe(200_000_000n);
   });
 });
 
 describe("compareReturns", () => {
   it("both rise: higher return wins, not higher price", () => {
-    const r = compareReturns([
-      { userId: A, ticker: "NVDA", startPrice: 180, endPrice: 189 },
-      { userId: B, ticker: "AAPL", startPrice: 250, endPrice: 257.5 },
-    ]);
-    expect(r.status).toBe("settled");
+    const r = compareReturns([input(A, "NVDA", "180", "189"), input(B, "AAPL", "250", "257.5")]);
     expect(r.winners).toEqual([A]);
-    expect(r.winningTicker).toBe("NVDA");
-    expect(r.marginPct).toBeCloseTo(2, 6);
-    expect(r.explanation).toContain("NVDA returned +5.00%, while AAPL returned +3.00%. NVDA wins by 2.00 percentage points");
+    expect(r.marginE4).toBe("20000"); // 5% − 3% = 2.0000 pts
   });
-
-  it("both fall: less negative wins", () => {
-    const r = compareReturns([
-      { userId: A, ticker: "NVDA", startPrice: 200, endPrice: 190 }, // -5%
-      { userId: B, ticker: "AAPL", startPrice: 250, endPrice: 245 }, // -2%
-    ]);
+  it("both fall: the smaller loss wins", () => {
+    const r = compareReturns([input(A, "TSLA", "400", "380"), input(B, "META", "600", "588")]);
     expect(r.winners).toEqual([B]);
-    expect(r.marginPct).toBeCloseTo(3, 6);
-    expect(r.explanation).toContain("fell less");
+    expect(r.explanation).toMatch(/fell less/);
   });
-
-  it("identical returns draw even at different prices", () => {
-    const r = compareReturns([
-      { userId: A, ticker: "MSFT", startPrice: 400, endPrice: 412 },
-      { userId: B, ticker: "GOOGL", startPrice: 150, endPrice: 154.5 },
-    ]);
+  it("identical returns draw, even at different prices", () => {
+    const r = compareReturns([input(A, "MSFT", "500", "515"), input(B, "GOOGL", "280", "288.4")]);
+    expect([r.status, r.winners]).toEqual(["draw", []]);
+  });
+  it("returns within 0.0001 pts compare as equal (truncated, deterministic)", () => {
+    // +1.00004% vs +1.00001% → both 1.0000 at 4 decimals
+    const r = compareReturns([input(A, "NVDA", "100", "101.00004"), input(B, "AAPL", "100", "101.00001")]);
     expect(r.status).toBe("draw");
-    expect(r.winners).toEqual([]);
   });
-
-  it("dollar gains don't matter", () => {
-    // tsla gains $20 (2%), amd gains $5 (4%) -> amd wins
-    const r = compareReturns([
-      { userId: A, ticker: "TSLA", startPrice: 1000, endPrice: 1020 },
-      { userId: B, ticker: "AMD", startPrice: 125, endPrice: 130 },
-    ]);
-    expect(r.winners).toEqual([B]);
-  });
-
-  it("one up, one down: the gain wins", () => {
-    const r = compareReturns([
-      { userId: A, ticker: "NVDA", startPrice: 100, endPrice: 99 },
-      { userId: B, ticker: "AAPL", startPrice: 100, endPrice: 100.5 },
-    ]);
-    expect(r.winners).toEqual([B]);
-    expect(r.marginPct).toBeCloseTo(1.5, 6);
-  });
-
-  it("flat vs flat is a draw", () => {
-    expect(compareReturns([
-      { userId: A, ticker: "KO", startPrice: 60, endPrice: 60 },
-      { userId: B, ticker: "JPM", startPrice: 300, endPrice: 300 },
-    ]).status).toBe("draw");
-  });
-
-  it("rejects identical stock selections", () => {
-    expect(() => compareReturns([
-      { userId: A, ticker: "NVDA", startPrice: 1, endPrice: 2 },
-      { userId: B, ticker: "NVDA", startPrice: 1, endPrice: 2 },
-    ])).toThrow();
-  });
-
-  it("group beef ranks everyone and shares ties for first", () => {
-    const r = compareReturns([
-      { userId: "a", ticker: "NVDA", startPrice: 100, endPrice: 110 },
-      { userId: "b", ticker: "AAPL", startPrice: 200, endPrice: 220 },
-      { userId: "c", ticker: "TSLA", startPrice: 100, endPrice: 95 },
-    ]);
-    expect(r.winners.sort()).toEqual(["a", "b"]);
-    expect(r.entries.find((e) => e.userId === "c")!.rank).toBe(2);
+  it("group: everyone ranked, ties for first share the win; same stock twice is refused", () => {
+    const r = compareReturns([input(A, "NVDA", "100", "110"), input(B, "AAPL", "100", "110"), input("carol", "TSLA", "100", "105")]);
+    expect(r.winners.sort()).toEqual([A, B]);
+    expect(() => compareReturns([input(A, "NVDA", "1", "2"), input(B, "NVDA", "1", "2")])).toThrow();
   });
 });
 
-describe("calendar", () => {
-  it("handles thanksgiving and the early close", () => {
-    // wed 2026-11-25 at noon et -> next close is that day 4pm
-    const wedNoon = new Date("2026-11-25T17:00:00Z");
-    expect(nextCloseAfter(wedNoon)).toBe("2026-11-25");
-    // after wed close, thursday is a holiday, friday is an early close
-    const wedNight = new Date("2026-11-26T02:00:00Z");
-    expect(nextCloseAfter(wedNight)).toBe("2026-11-27");
+describe("calendar (holidays, early closes, dst)", () => {
+  it("thanksgiving is skipped and the friday early close is 1pm et", () => {
+    expect(nextCloseAfter(new Date("2026-11-25T17:00:00Z"))).toBe("2026-11-25");
+    expect(nextCloseAfter(new Date("2026-11-26T02:00:00Z"))).toBe("2026-11-27");
     expect(sessionCloseUtc("2026-11-27").toISOString()).toBe("2026-11-27T18:00:00.000Z");
   });
-  it("dst: summer close is 20:00 utc, winter 21:00 utc", () => {
+  it("dst: summer close 20:00 utc, winter 21:00 utc", () => {
     expect(sessionCloseUtc("2026-07-15").toISOString()).toBe("2026-07-15T20:00:00.000Z");
     expect(sessionCloseUtc("2026-12-15").toISOString()).toBe("2026-12-15T21:00:00.000Z");
   });
-  it("weekend deadline rolls back to friday close", () => {
+  it("weekend deadline rolls back; a deadline on the lock rolls forward; presets follow the lock", () => {
     expect(lastCloseAtOrBefore(new Date("2026-12-06T15:00:00Z"))).toBe("2026-12-04");
-  });
-  it("deadline on/before lock rolls forward to the next session", () => {
     expect(resolveEndSession(new Date("2026-12-01T21:00:00Z"), "2026-12-01")).toBe("2026-12-02");
-  });
-  it("presets are all after the lock session", () => {
     const now = new Date("2026-11-25T17:00:00Z");
-    const lock = nextCloseAfter(now);
-    for (const o of deadlineOptions(now)) expect(o.session > lock).toBe(true);
+    for (const o of deadlineOptions(now)) expect(o.session > nextCloseAfter(now)).toBe(true);
   });
 });
 
-describe("mock provider", () => {
-  it("is deterministic", async () => {
-    const p1 = new MockMarketProvider(), p2 = new MockMarketProvider();
-    const a = await p1.getClose("NVDA", "2026-11-20");
-    const b = await p2.getClose("NVDA", "2026-11-20");
-    expect(a.close).toBe(b.close);
-    expect(a.simulated).toBe(true);
+// ---------- settlement service on chainlink fixture reports ----------
+
+const LOCK = "2026-12-01", END = "2026-12-04"; // tue → fri
+const refTs = (session: string) => Math.floor(sessionCloseUtc(session).getTime() / 1000) - 1;
+type Fx = { mid: string; status?: number; midAgeS?: number; bid?: string; ask?: string };
+
+function oracle(data: Record<string, Fx>, opts: { verification?: Verification["status"]; now?: Date } = {}) {
+  const byTs: Record<string, ReturnType<typeof fixtureReport>> = {};
+  for (const [k, v] of Object.entries(data)) {
+    if (!v) continue; // a deliberately missing report
+    const [t, session] = k.split("@") as [SupportedTicker, string];
+    const id = fixtureStream(t);
+    byTs[`${id}@${refTs(session)}`] = fixtureReport({ streamId: id, observationsTimestamp: refTs(session), mid: v.mid, marketStatus: v.status ?? 2, midAgeS: v.midAgeS, bid: v.bid, ask: v.ask });
+  }
+  const api: StreamsApi = {
+    async getLatestReport() { throw new Error("not used"); },
+    async getReportByTimestamp(id, ts) { const r = byTs[`${id}@${ts}`]; if (!r) throw new Error("404 no report"); return r; },
+  };
+  const calls = { verify: 0 };
+  const prices = new ChainlinkPrices({
+    api, now: () => opts.now ?? new Date("2026-12-10T00:00:00Z"),
+    streams: async (t) => ({ regular: { ticker: t, session: "regular", streamId: fixtureStream(t), name: "", schema: "v11", decimals: 18, network: "testnet", verifier: "base_sepolia_verifier_proxy" } }),
+    verify: async () => { calls.verify++; return { status: opts.verification ?? "verified", method: "chainlink_verifier_proxy_eth_call", verifier: BASE_SEPOLIA_VERIFIER_PROXY, chainId: 84532, configDigest: null, checkedAt: "", detail: "fixture" }; },
   });
-  it("returns invalid for weekends and unknown tickers", async () => {
-    const p = new MockMarketProvider();
-    expect((await p.getClose("NVDA", "2026-11-21")).status).toBe("invalid");
-    expect((await p.getClose("ZZZZ", "2026-11-20")).status).toBe("invalid");
-  });
+  return { prices, calls };
+}
+
+const duel = (over: Partial<SettleableDuel> = {}): SettleableDuel => ({
+  id: "d1", status: "active", acceptedAt: "2026-12-01T15:00:00Z", deadline: "2026-12-04T21:00:00Z",
+  participants: [{ userId: A, ticker: "NVDA" }, { userId: B, ticker: "AAPL" }], ...over,
 });
+const AFTER = new Date("2026-12-05T00:00:00Z");
+const happy = { [`NVDA@${LOCK}`]: { mid: "180" }, [`NVDA@${END}`]: { mid: "189" }, [`AAPL@${LOCK}`]: { mid: "250" }, [`AAPL@${END}`]: { mid: "257.5" } };
 
-const duelBase = {
-  id: "d1",
-  status: "active",
-  participants: [{ userId: A, ticker: "NVDA" }, { userId: B, ticker: "AAPL" }],
-  acceptedAt: "2026-11-02T15:00:00Z", // lock = 2026-11-02 close
-  deadline: "2026-11-06T21:00:00Z",
-};
-
-describe("settlement service", () => {
-  const now = new Date("2026-11-10T00:00:00Z");
-
-  it("settles once and is idempotent", async () => {
+describe("settlement service (chainlink regular-hours mid)", () => {
+  it("settles once with full evidence, then is idempotent", async () => {
     const repo = new InMemorySettlementRepository();
-    const p = new MockMarketProvider();
-    const first = await settleDuel(duelBase, p, repo, now);
-    expect(first.outcome).toBe("settled");
-    const second = await settleDuel(duelBase, p, repo, now);
-    expect(second.outcome).toBe("already_settled");
-    if (first.outcome === "settled" && second.outcome === "already_settled") {
-      expect(second.settlement).toEqual(first.settlement);
-    }
-    const audit = await repo.listAudit("d1");
-    expect(audit.some((a) => a.action === "settle.skipped")).toBe(true);
+    const { prices } = oracle(happy);
+    const r = await settleDuel(duel(), prices, repo, AFTER);
+    expect(r.outcome).toBe("settled");
+    if (r.outcome !== "settled") return;
+    expect(r.settlement.winners).toEqual([A]);
+    expect(r.settlement.methodology).toBe("chainlink_regular_hours_mid_v1");
+    expect(r.settlement.window).toEqual({ startSession: LOCK, endSession: END, startTimestamp: refTs(LOCK), endTimestamp: refTs(END) });
+    expect(r.settlement.evidence).toHaveLength(4);
+    expect(r.settlement.evidence!.every((e) => e.verification === "verified" && e.marketStatus === 2 && /^0x/.test(e.reportHash))).toBe(true);
+    expect((await settleDuel(duel(), prices, repo, AFTER)).outcome).toBe("already_settled");
   });
-
+  it("both stocks use exactly the same two timestamps", async () => {
+    const r = await settleDuel(duel(), oracle(happy).prices, new InMemorySettlementRepository(), AFTER);
+    if (r.outcome !== "settled") throw new Error(r.outcome);
+    const ts = (k: string) => new Set(r.settlement.evidence!.filter((e) => e.kind === k).map((e) => e.observationsTimestamp));
+    expect([...ts("start")]).toEqual([refTs(LOCK)]);
+    expect([...ts("end")]).toEqual([refTs(END)]);
+  });
   it("concurrent settlement stores exactly one result", async () => {
     const repo = new InMemorySettlementRepository();
-    const p = new MockMarketProvider();
-    const results = await Promise.all([1, 2, 3].map(() => settleDuel(duelBase, p, repo, now)));
-    expect(results.filter((r) => r.outcome === "settled").length).toBe(1);
+    const { prices } = oracle(happy);
+    const rs = await Promise.all([settleDuel(duel(), prices, repo, AFTER), settleDuel(duel(), prices, repo, AFTER)]);
+    expect(rs.map((r) => r.outcome).sort()).toEqual(["already_settled", "settled"]);
+  });
+  it("not before the deadline close; never for non-active duels", async () => {
+    expect((await settleDuel(duel(), oracle(happy).prices, new InMemorySettlementRepository(), new Date("2026-12-04T20:00:00Z"))).outcome).toBe("not_due");
+    expect((await settleDuel(duel({ status: "pending" }), oracle(happy).prices, new InMemorySettlementRepository(), AFTER)).outcome).toBe("rejected");
+  });
+  it("identical returns → draw; both negative → smaller loss wins", async () => {
+    const draw = await settleDuel(duel(), oracle({ ...happy, [`AAPL@${END}`]: { mid: "262.5" } }).prices, new InMemorySettlementRepository(), AFTER);
+    expect(draw.outcome === "settled" && draw.settlement.status).toBe("draw");
+    const down = await settleDuel(duel(), oracle({ ...happy, [`NVDA@${END}`]: { mid: "171" }, [`AAPL@${END}`]: { mid: "245" } }).prices, new InMemorySettlementRepository(), AFTER);
+    expect(down.outcome === "settled" && down.settlement.winners).toEqual([B]);
   });
 
-  it("refuses to settle before the deadline close", async () => {
-    const r = await settleDuel(duelBase, new MockMarketProvider(), new InMemorySettlementRepository(), new Date("2026-11-06T20:00:00Z"));
-    expect(r.outcome).toBe("not_due");
-  });
-
-  it("refuses non-active duels", async () => {
-    const r = await settleDuel({ ...duelBase, status: "cancelled" }, new MockMarketProvider(), new InMemorySettlementRepository(), now);
-    expect(r.outcome).toBe("rejected");
-  });
-
-  it("pauses on missing data instead of declaring a winner", async () => {
-    const mock = new MockMarketProvider();
-    const broken: MarketDataProvider = {
-      ...mock, id: mock.id, label: mock.label, simulated: true,
-      search: mock.search.bind(mock), getAsset: mock.getAsset.bind(mock), getQuote: mock.getQuote.bind(mock),
-      getHistory: mock.getHistory.bind(mock), getCorporateActions: mock.getCorporateActions.bind(mock),
-      async getClose(t: string, s: string): Promise<ClosePrice> {
-        const c = await mock.getClose(t, s);
-        return t === "AAPL" && s === "2026-11-06" ? { ...c, status: "missing", close: 0 } : c;
-      },
-    };
+  const pausedWith = async (data: Record<string, Fx>, re: RegExp, opts?: Parameters<typeof oracle>[1]) => {
     const repo = new InMemorySettlementRepository();
-    const r = await settleDuel(duelBase, broken, repo, now);
+    const r = await settleDuel(duel(), oracle(data, opts).prices, repo, AFTER);
     expect(r.outcome).toBe("needs_verification");
-    if (r.outcome === "needs_verification") expect(r.settlement.winners).toEqual([]);
-    // once data is back, settlement goes through
-    const again = await settleDuel({ ...duelBase, status: "awaiting_verification" }, mock, repo, now);
-    expect(again.outcome).toBe("settled");
-  });
-
-  it("pauses when the provider request fails (outage / timeout)", async () => {
-    const mock = new MockMarketProvider();
-    const down: MarketDataProvider = {
-      id: mock.id, label: mock.label, simulated: true,
-      search: mock.search.bind(mock), getAsset: mock.getAsset.bind(mock), getQuote: mock.getQuote.bind(mock),
-      getHistory: mock.getHistory.bind(mock), getCorporateActions: mock.getCorporateActions.bind(mock),
-      async getClose() { throw new Error("timeout"); },
-    };
-    const repo = new InMemorySettlementRepository();
-    const r = await settleDuel(duelBase, down, repo, now);
-    expect(r.outcome).toBe("needs_verification");
-    if (r.outcome === "needs_verification") expect(r.settlement.issues.join(" ")).toContain("price request failed");
-    expect(await repo.getSettlement(duelBase.id)).toBeNull(); // nothing recorded
-    const lock = await lockStartPrices(duelBase, down, new Date("2026-11-02T21:30:00Z"));
-    expect(lock.ok).toBe(false);
-  });
-
-  it("both stocks always share the same window", async () => {
-    const r = await settleDuel(duelBase, new MockMarketProvider(), new InMemorySettlementRepository(), now);
-    if (r.outcome !== "settled") throw new Error("expected settled");
-    expect(new Set(r.startSnapshots.map((x) => x.session)).size).toBe(1);
-    expect(new Set(r.endSnapshots.map((x) => x.session)).size).toBe(1);
-    expect(r.settlement.startSession).toBe(r.startSnapshots[0].session);
-  });
-
-  it("pauses on a trading halt (smci simulated halt)", async () => {
-    const r = await settleDuel(
-      { ...duelBase, id: "d2", participants: [{ userId: A, ticker: "SMCI" }, { userId: B, ticker: "AMD" }], acceptedAt: "2026-11-16T15:00:00Z", deadline: "2026-11-20T21:00:00Z" },
-      new MockMarketProvider(), new InMemorySettlementRepository(), new Date("2026-11-23T00:00:00Z"),
-    );
-    expect(r.outcome).toBe("needs_verification");
-  });
-
-  it("applies split adjustments (avgo 4:1 simulated)", async () => {
-    const p = new MockMarketProvider();
-    const r = await settleDuel(
-      { ...duelBase, id: "d3", participants: [{ userId: A, ticker: "AVGO" }, { userId: B, ticker: "MSFT" }], acceptedAt: "2026-12-01T15:00:00Z", deadline: "2026-12-11T21:00:00Z" },
-      p, new InMemorySettlementRepository(), new Date("2026-12-14T00:00:00Z"),
-    );
-    expect(r.outcome).toBe("settled");
-    if (r.outcome === "settled") {
-      const s = r.startSnapshots.find((x) => x.ticker === "AVGO")!;
-      expect(s.adjustedPrice).toBeCloseTo(s.price / 4, 4);
-      const e = r.settlement.entries.find((x) => x.ticker === "AVGO")!;
-      // adjusted return stays in a sane range rather than ~-75%
-      expect(Math.abs(e.returnPct)).toBeLessThan(40);
+    if (r.outcome === "needs_verification") {
+      expect(r.settlement.winners).toEqual([]);
+      expect(r.settlement.issues.join(" ")).toMatch(re);
     }
+    expect(await repo.getSettlement("d1")).toBeNull(); // nothing recorded
+  };
+  it("pauses on a missing report", () => pausedWith({ ...happy, [`AAPL@${END}`]: undefined as never }, /no usable chainlink report/));
+  it("pauses when chainlink's verifier doesn't accept the report", () => pausedWith(happy, /not verified by chainlink \(reverted/, { verification: "reverted" }));
+  it("pauses when market status isn't regular hours (closed, unknown, post-market)", async () => {
+    await pausedWith({ ...happy, [`NVDA@${END}`]: { mid: "189", status: 5 } }, /market closed \(5\)/);
+    await pausedWith({ ...happy, [`NVDA@${END}`]: { mid: "189", status: 0 } }, /unknown \(0\)/);
+    await pausedWith({ ...happy, [`NVDA@${END}`]: { mid: "189", status: 3 } }, /after hours \(3\)/);
+  });
+  it("pauses on a stale mid (possible trading halt)", () => pausedWith({ ...happy, [`AAPL@${END}`]: { mid: "257.5", midAgeS: 1800 } }, /hadn't updated.*halt/));
+  it("pauses on a crossed or very wide quote", () => pausedWith({ ...happy, [`AAPL@${END}`]: { mid: "257.5", bid: "240", ask: "275" } }, /wide spread/));
+  it("pauses on a big move with no recorded corporate action (possible unrecorded split)", () => pausedWith({ ...happy, [`NVDA@${END}`]: { mid: "18.9" } }, /possible split/));
+
+  it("applies a recorded 10-for-1 split exactly to the starting price", async () => {
+    const repo = new InMemorySettlementRepository([{ ticker: "NVDA", session: "2026-12-03", ratioNum: 10, ratioDen: 1 }]);
+    const r = await settleDuel(duel(), oracle({ ...happy, [`NVDA@${END}`]: { mid: "18.9" } }).prices, repo, AFTER);
+    if (r.outcome !== "settled") throw new Error(r.outcome);
+    const nvda = r.settlement.entries.find((e) => e.ticker === "NVDA")!;
+    expect([nvda.startE18, nvda.returnE6]).toEqual([e18("18").toString(), "5000000"]); // 180 / 10 → 18, +5%
+    expect((await repo.listAudit("d1")).some((a) => a.action === "settle.adjust")).toBe(true);
   });
 
-  it("locks start prices only after the lock close", async () => {
-    const p = new MockMarketProvider();
-    const early = await lockStartPrices(duelBase, p, new Date("2026-11-02T20:00:00Z"));
-    expect(early.ok).toBe(false);
-    const ok = await lockStartPrices(duelBase, p, new Date("2026-11-02T21:30:00Z"));
-    expect(ok.ok).toBe(true);
-    expect(ok.snapshots).toHaveLength(2);
-    expect(ok.lockSession).toBe("2026-11-02");
+  it("uses the locked start snapshots instead of refetching", async () => {
+    const repo = new InMemorySettlementRepository();
+    const lock = await lockStartPrices(duel({ status: "accepted" }), oracle(happy).prices, AFTER);
+    expect(lock.ok).toBe(true);
+    // start reports no longer served: settlement must rely on the locked snapshots
+    const endOnly = { [`NVDA@${END}`]: { mid: "189" }, [`AAPL@${END}`]: { mid: "257.5" } };
+    const r = await settleDuel(duel({ startSnapshots: lock.snapshots }), oracle(endOnly).prices, repo, AFTER);
+    expect(r.outcome).toBe("settled");
+  });
+  it("locks only after the lock close, and refuses unverified starting prices", async () => {
+    expect((await lockStartPrices(duel({ status: "accepted" }), oracle(happy).prices, new Date("2026-12-01T20:00:00Z"))).issues[0]).toMatch(/waiting/);
+    const bad = await lockStartPrices(duel({ status: "accepted" }), oracle(happy, { verification: "unsupported_config" }).prices, AFTER);
+    expect([bad.ok, bad.snapshots]).toEqual([false, []]);
+  });
+  it("holiday deadline: thanksgiving rolls back to wednesday's close", () => {
+    expect(resolveEndSession(new Date("2026-11-26T21:00:00Z"), "2026-11-23")).toBe("2026-11-25");
   });
 });

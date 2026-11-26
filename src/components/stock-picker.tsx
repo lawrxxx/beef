@@ -4,8 +4,8 @@ import { useMemo, useState } from "react";
 import { Check, Search } from "lucide-react";
 import { ASSETS } from "@/lib/market/assets";
 import { useQuotes } from "@/lib/hooks";
-import { cx, price } from "@/lib/format";
-import { Pct } from "@/components/ui";
+import { cx } from "@/lib/format";
+import { QuoteLine } from "@/components/ui";
 
 export function StockPicker({ value, onChange, exclude = [], label }: { value?: string; onChange: (t: string) => void; exclude?: string[]; label?: string }) {
   const [q, setQ] = useState("");
@@ -42,7 +42,7 @@ export function StockPicker({ value, onChange, exclude = [], label }: { value?: 
                   <span className="block truncate text-[13px] text-muted">{a.name}{disabled ? " · already picked" : ""}</span>
                 </span>
                 <span className="text-right">
-                  {qt ? <><span className="num block text-sm font-semibold">{price(qt.price)}</span><Pct v={qt.changePct} className="text-[12px]" /></> : loading ? <span className="skeleton block h-4 w-14" /> : null}
+                  {qt ? <QuoteLine q={qt} className="items-end" /> : loading ? <span className="skeleton block h-4 w-14" /> : null}
                 </span>
                 {sel && <Check size={18} className="text-brand" />}
               </button>

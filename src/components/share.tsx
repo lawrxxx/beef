@@ -68,7 +68,7 @@ function footer(ctx: CanvasRenderingContext2D, date: string) {
   ctx.fillText(typeof window !== "undefined" ? window.location.host : "beef", W - 80, H - 120);
   ctx.textAlign = "left";
   ctx.fillStyle = C.gold; ctx.font = font(600, 24);
-  ctx.fillText("simulated market data · no real money", 80, H - 76);
+  ctx.fillText("prices: chainlink data streams · test usdc, no real money", 80, H - 76);
 }
 
 export function drawTrophyCard(d: Duel, users: Record<string, User | undefined>): HTMLCanvasElement {

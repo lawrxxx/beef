@@ -1,7 +1,7 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { AuditLog, Settlement } from "@/lib/types";
-import type { SettlementRepository } from "@/lib/settlement/service";
+import type { CorporateAction, SettlementRepository } from "@/lib/settlement/service";
 
 // postgres-backed settlement repository. idempotency comes from the unique
 // constraint on duel_settlements.duel_id: a second insert fails with 23505.
@@ -37,6 +37,12 @@ export class SupabaseSettlementRepository implements SettlementRepository {
 
   async appendAudit(log: Omit<AuditLog, "id">): Promise<void> {
     await this.db.from("settlement_audit_logs").insert({ duel_id: log.duelId, at: log.at, action: log.action, detail: log.detail });
+  }
+
+  async corporateActions(ticker: string, from: string, to: string): Promise<CorporateAction[]> {
+    const { data, error } = await this.db.from("corporate_actions").select("ticker,session,ratio_num,ratio_den").eq("ticker", ticker).gt("session", from).lte("session", to);
+    if (error) throw new Error(`couldn't check corporate actions: ${error.message}`);
+    return (data ?? []).map((r: any) => ({ ticker: r.ticker, session: String(r.session), ratioNum: r.ratio_num, ratioDen: r.ratio_den }));
   }
 
   async listAudit(duelId: string): Promise<AuditLog[]> {

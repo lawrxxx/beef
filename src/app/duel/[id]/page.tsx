@@ -16,7 +16,8 @@ import { livePerformance, useMe, useMounted, useNow, useQuotes, userById } from 
 import { canAccept, isParticipant, STATUS_LABEL } from "@/lib/derive";
 import { countdown, cx, marketTime, price, sessionLabel, usd } from "@/lib/format";
 import { resolveEndSession, sessionCloseUtc, sessionDateOf } from "@/lib/market/calendar";
-import { Avatar, CardSkeleton, EmptyState, Pct, SimBadge, UserLink, useAction } from "@/components/ui";
+import { txUrl } from "@/lib/chain/config";
+import { Avatar, CardSkeleton, EmptyState, Pct, QuoteLine, SourceBadge, UserLink, useAction } from "@/components/ui";
 import { StatusPill, VersusBar } from "@/components/duel-card";
 import { Comments, ReactionBar } from "@/components/social";
 import { drawTrophyCard, shareCanvas, shareLink } from "@/components/share";
@@ -68,7 +69,7 @@ function DuelView({ d }: { d: Duel }) {
     <div className="pb-6">
       <div className="mb-3 flex items-center justify-between">
         <button className="btn-ghost btn-sm -ml-2 !px-2" onClick={() => router.back()} aria-label="back"><ArrowLeft size={20} /></button>
-        <div className="flex items-center gap-2"><SimBadge /><StatusPill d={d} /></div>
+        <div className="flex items-center gap-2"><SourceBadge /><StatusPill d={d} /></div>
       </div>
 
       {d.title && <h1 className="mb-1 font-display text-2xl font-bold tracking-tight">{d.title}</h1>}
@@ -187,7 +188,7 @@ function DuelView({ d }: { d: Duel }) {
             </div>
           </div>
         )}
-        {live && quoteError && <p className="text-sm text-loss">live prices are unavailable right now. the result isn't affected: it uses official closes.</p>}
+        {live && quoteError && <p className="text-sm text-loss">live chainlink prices are unavailable right now. the result isn't affected: it uses verified regular-hours reports.</p>}
       </div>
 
       {cdpEnabled() && <DuelFunding d={d} />}
@@ -197,7 +198,7 @@ function DuelView({ d }: { d: Duel }) {
         <div className="card mt-4 overflow-hidden">
           <div className="flex items-center justify-between border-b px-4 py-3">
             <p className="font-semibold">prices</p>
-            <span className="text-xs text-muted">source: {d.startSnapshots[0]?.source === "mock" ? "beef simulated market" : d.startSnapshots[0]?.source}</span>
+            <span className="flex items-center gap-1.5 text-xs text-muted">source <SourceBadge /></span>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full min-w-[420px] text-sm">
@@ -212,7 +213,7 @@ function DuelView({ d }: { d: Duel }) {
                       {p.startPrice != null ? price(p.startPrice) : <span className="text-[12px] text-muted">locks at close</span>}
                       {p.adjustedStart != null && <span className="block text-[11px] text-gold">split-adj. {price(p.adjustedStart)}</span>}
                     </td>
-                    <td className="num px-2 py-2.5">{p.current != null ? price(p.current) : "—"}{live && <span className="block text-[11px] text-muted">{p.quote?.marketOpen ? "live (simulated)" : "last close (simulated)"}</span>}</td>
+                    <td className="num px-2 py-2.5">{p.endSnap ? price(p.endSnap.price) : live ? <QuoteLine q={p.quote} /> : p.current != null ? price(p.current) : "—"}</td>
                     <td className="px-4 py-2.5 text-right"><Pct v={p.ret} /></td>
                   </tr>
                 ))}
@@ -220,9 +221,14 @@ function DuelView({ d }: { d: Duel }) {
             </table>
           </div>
           <div className="space-y-1 border-t bg-black/[.015] px-4 py-3 text-xs text-muted">
-            {d.startSnapshots[0] && <p>start: official close {sessionLabel(d.startSnapshots[0].session)} · {marketTime(d.startSnapshots[0].timestamp)}</p>}
-            {d.endSnapshots[0] ? <p>end: official close {sessionLabel(d.endSnapshots[0].session)} · {marketTime(d.endSnapshots[0].timestamp)}</p> : endSession && <p>end: official close {sessionLabel(endSession)} · {marketTime(sessionCloseUtc(endSession).toISOString())}</p>}
-            {st && <p>settlement: {st.status === "needs_verification" ? "pending verification" : st.status} · calculation {st.calculationVersion} · {st.simulated ? "simulated data" : st.source}</p>}
+            {d.startSnapshots[0] && <p>start: chainlink regular-hours mid, {sessionLabel(d.startSnapshots[0].session)} · {marketTime(d.startSnapshots[0].timestamp)}</p>}
+            {d.endSnapshots[0] ? <p>end: chainlink regular-hours mid, {sessionLabel(d.endSnapshots[0].session)} · {marketTime(d.endSnapshots[0].timestamp)}</p> : endSession && <p>end: chainlink regular-hours mid one second before the {sessionLabel(endSession)} close · {marketTime(sessionCloseUtc(endSession).toISOString())}</p>}
+            {[...d.startSnapshots, ...d.endSnapshots].filter((x) => x.streamId).map((x) => (
+              <p key={`${x.ticker}${x.kind}`} className="font-mono text-[11px]">{x.ticker} {x.kind}: stream {x.streamId!.slice(0, 10)}…{x.streamId!.slice(-4)} · observed {x.observationsTimestamp ? new Date(x.observationsTimestamp * 1000).toISOString().slice(0, 19).replace("T", " ") + "z" : "—"} · report {x.reportHash?.slice(0, 10)}… · {x.verification?.status === "verified" ? "verified by chainlink's verifier (base sepolia)" : `verification: ${x.verification?.status ?? "none"}`}</p>
+            ))}
+            {st && <p>settlement: {st.status === "needs_verification" ? "paused for verification" : st.status} · {st.methodology} · calculation {st.calculationVersion}{st.marginE4 && st.status === "settled" ? ` · margin ${(Number(st.marginE4) / 1e4).toFixed(4)} pts` : ""}</p>}
+            {st?.issues?.length ? <p className="text-gold">why it's paused: {st.issues.join("; ")}</p> : null}
+            {d.settleTx && <p>payout transaction: <a className="underline" href={txUrl(d.settleTx)} target="_blank" rel="noreferrer">{d.settleTx.slice(0, 10)}… on the base sepolia explorer</a></p>}
             <p>return = ((end − start) ÷ start) × 100. share price doesn't matter, only the percentage move.</p>
           </div>
         </div>
@@ -240,11 +246,11 @@ function DuelView({ d }: { d: Duel }) {
               ["stocks", d.participants.map((p) => `${p.ticker} (@${usersMap[p.userId]?.username ?? "open"})`).join(" vs ")],
               ["stake", `${fmtStake(d.stake)} test usdc each, held by the beef escrow on base sepolia`],
               ["prize pool", `${pot} test usdc`],
-              ["comparison", "percentage return, official closing prices"],
+              ["comparison", "percentage return from chainlink regular-hours mids at the lock and end closes"],
               ["price lock", d.terms.priceRule],
               ["deadline", marketTime(d.deadline)],
               ["settlement", d.terms.settlementRule],
-              ["price data", d.terms.provider === "mock" ? "beef simulated market prices (not live)" : d.terms.provider],
+              ["price data", "chainlink data streams · 24/5 us equities (rwa advanced v11), verified with chainlink's base sepolia verifier"],
               ["market timezone", "america/new_york (et). stored in utc."],
               ["calculation", d.terms.calculationVersion],
               ["created", `${marketTime(d.createdAt)} by @${usersMap[d.createdBy]?.username}`],
