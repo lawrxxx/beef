@@ -10,6 +10,11 @@ const nextConfig: NextConfig = {
     config.resolve.alias = { ...config.resolve.alias, "x402-fetch": false, "expo-secure-store": false, "expo-web-browser": false, "@react-native-async-storage/async-storage": false };
     return config;
   },
+  // coinbase's wallet sign-in api, served from beef's own domain for phones that can't reach
+  // api.cdp.coinbase.com directly. see src/components/wallet/cdp-route.ts.
+  async rewrites() {
+    return [{ source: "/cdp-api/:path*", destination: "https://api.cdp.coinbase.com/platform/:path*" }];
+  },
   async headers() {
     return [
       {
