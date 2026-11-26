@@ -89,9 +89,9 @@ export function QuoteLine({ q, className, big }: { q?: import("@/lib/types").Quo
 
 export function PageHeader({ title, subtitle, action }: { title: string; subtitle?: string; action?: ReactNode }) {
   return (
-    <div className="mb-5 flex items-end justify-between gap-3 border-b-[3px] border-ink pb-3">
+    <div className="mb-5 flex flex-wrap items-end justify-between gap-3 border-b-[3px] border-ink pb-3">
       <div className="min-w-0">
-        <h1 className="cond break-words text-[clamp(38px,11vw,56px)] leading-[.82]">{title}</h1>
+        <h1 className="cond pr-2 text-[clamp(36px,10.5vw,56px)] leading-[.86]">{title}</h1>
         {subtitle && <p className="meta mt-2 text-muted">{subtitle}</p>}
       </div>
       {action}

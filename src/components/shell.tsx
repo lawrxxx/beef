@@ -24,15 +24,14 @@ function isActive(path: string, href: string) {
   return href === "/" ? path === "/" : path === href || path.startsWith(href + "/");
 }
 
-export function Logo({ size = 28 }: { size?: number }) {
+/** the beef wordmark: three speed stripes and a slanted team-style BEEF */
+export function Logo({ size = 28, className }: { size?: number; className?: string }) {
   return (
-    <Link href="/" className="flex items-center gap-1.5" aria-label="beef home">
-      <svg width={size} height={size} viewBox="0 0 64 64" aria-hidden>
-        <rect width="64" height="64" fill="rgb(var(--brand))" />
-        <path d="M12 19a6 6 0 0 1 6-6h16a6 6 0 0 1 6 6v9a6 6 0 0 1-6 6h-8l-7 6v-6h-1a6 6 0 0 1-6-6z" fill="#FAF7F1" />
-        <path d="M52 33a5 5 0 0 0-5-5H33a5 5 0 0 0-5 5v8a5 5 0 0 0 5 5h7l6 5v-5h1a5 5 0 0 0 5-5z" fill="#1C1915" />
-      </svg>
-      <span className="cond text-[30px] leading-none">beef</span>
+    <Link href="/" className={cx("flex items-center gap-[0.18em]", className)} style={{ fontSize: size }} aria-label="beef home">
+      <span className="flex h-[0.8em] items-stretch gap-[0.07em] -skew-x-[20deg]" aria-hidden>
+        <i className="block w-[0.11em] bg-brand" /><i className="block w-[0.11em] bg-brand" /><i className="block w-[0.11em] bg-brand" />
+      </span>
+      <span className="cond text-[1.12em] leading-none">beef</span>
     </Link>
   );
 }
@@ -45,9 +44,9 @@ function useUnread() {
 function BellLink({ className }: { className?: string }) {
   const unread = useUnread();
   return (
-    <Link href="/notifications" className={cx("relative inline-flex h-11 w-11 items-center justify-center hover:bg-ink/[.07]", className)} aria-label={`notifications${unread ? `, ${unread} unread` : ""}`}>
+    <Link href="/notifications" className={cx("relative inline-flex h-11 w-11 items-center justify-center hover:bg-white/10", className)} aria-label={`notifications${unread ? `, ${unread} unread` : ""}`}>
       <Bell size={22} />
-      {unread > 0 && <span className="num absolute right-0.5 top-1.5 flex h-[17px] min-w-[17px] items-center justify-center bg-brand px-1 text-[10px] font-bold text-[rgb(18_17_16)]">{unread}</span>}
+      {unread > 0 && <span className="num absolute right-0.5 top-1.5 flex h-[17px] min-w-[17px] items-center justify-center bg-brand px-1 text-[10px] font-bold text-brand-ink">{unread}</span>}
     </Link>
   );
 }
@@ -101,11 +100,11 @@ export function AppShell({ children }: { children: ReactNode }) {
       <div className="flex min-w-0 flex-1 justify-center">
         <div className="w-full min-w-0 max-w-[640px]">
           {/* mobile top bar */}
-          <header className="sticky top-0 z-30 flex items-center justify-between border-b-[3px] border-ink bg-bg px-4 pt-safe lg:hidden">
-            <div className="flex h-14 items-center"><Logo size={26} /></div>
+          <header className="slab sticky top-0 z-30 flex items-center justify-between border-b-[4px] border-brand px-4 pt-safe lg:hidden">
+            <div className="flex h-14 items-center"><Logo size={27} /></div>
             <div className="flex items-center">
               <ThemeToggle />
-              <Link href="/wallet" className="inline-flex h-11 w-11 items-center justify-center hover:bg-ink/[.07]" aria-label="wallet"><Wallet size={21} /></Link>
+              <Link href="/wallet" className="inline-flex h-11 w-11 items-center justify-center hover:bg-white/10" aria-label="wallet"><Wallet size={21} /></Link>
               <BellLink />
             </div>
           </header>
@@ -115,20 +114,20 @@ export function AppShell({ children }: { children: ReactNode }) {
       </div>
 
       {/* mobile bottom nav */}
-      <nav className="fixed inset-x-0 bottom-0 z-40 border-t-[3px] border-ink bg-bg pb-safe lg:hidden" aria-label="primary">
+      <nav className="slab fixed inset-x-0 bottom-0 z-40 border-t-[4px] border-brand pb-safe lg:hidden" aria-label="primary">
         <div className="mx-auto grid h-16 max-w-md grid-cols-5">
           {NAV.map(({ href, label, icon: Icon }) => {
             const active = isActive(path, href);
             if (href === "/duel") {
               return (
-                <Link key={href} href="/duel" className={cx("meta flex flex-col items-center justify-center gap-0.5 bg-brand font-bold text-[rgb(18_17_16)]", active && "underline decoration-2 underline-offset-4")} aria-current={active ? "page" : undefined} aria-label="duel">
+                <Link key={href} href="/duel" className={cx("meta flex flex-col items-center justify-center gap-0.5 bg-brand font-bold text-brand-ink", active && "underline decoration-2 underline-offset-4")} aria-current={active ? "page" : undefined} aria-label="duel">
                   <Swords size={21} strokeWidth={2.4} /> beef
                 </Link>
               );
             }
             return (
-              <Link key={href} href={href} className={cx("meta relative flex flex-col items-center justify-center gap-0.5 !text-[9.5px] font-bold", active ? "text-ink" : "text-faint")} aria-current={active ? "page" : undefined}>
-                {active && <span className="absolute inset-x-0 top-0 h-[4px] bg-brand" aria-hidden />}
+              <Link key={href} href={href} className={cx("meta relative flex flex-col items-center justify-center gap-0.5 !text-[10px] font-bold", active ? "text-white" : "text-slab-muted")} aria-current={active ? "page" : undefined}>
+                {active && <span className="absolute inset-x-3 top-0 h-[3px] bg-white" aria-hidden />}
                 <Icon size={22} strokeWidth={active ? 2.3 : 1.8} />
                 {label === "leaderboard" ? "ranks" : label}
               </Link>
@@ -143,7 +142,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
 function UnreadPill() {
   const n = useUnread();
-  return n ? <span className="num ml-auto bg-brand px-1.5 py-0.5 text-[11px] font-bold text-[rgb(18_17_16)]">{n}</span> : null;
+  return n ? <span className="num ml-auto bg-brand px-1.5 py-0.5 text-[11px] font-bold text-brand-ink">{n}</span> : null;
 }
 
 function PageSkeleton() {

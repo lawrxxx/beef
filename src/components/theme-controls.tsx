@@ -49,7 +49,7 @@ export function ThemeToggle({ className }: { className?: string }) {
   const label = mounted ? `appearance: ${pref}${pref === "system" ? ` (${resolved})` : ""}. switch to ${next}` : "appearance";
   return (
     <button type="button" onClick={() => set(next)} aria-label={label} title={label}
-      className={cx("inline-flex h-11 w-11 items-center justify-center rounded-full text-ink hover:bg-ink/5", className)}>
+      className={cx("inline-flex h-11 w-11 items-center justify-center rounded-full hover:bg-ink/10", className)}>
       <Icon size={20} aria-hidden />
     </button>
   );

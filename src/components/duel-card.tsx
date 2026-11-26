@@ -11,8 +11,9 @@ import { STATUS_LABEL, STATUS_STYLE } from "@/lib/derive";
 import { countdown, cx, pct } from "@/lib/format";
 import { Avatar } from "@/components/ui";
 
-// the versus slab: beef's one recognisable shape. every duel, anywhere, is two (or more)
-// sides on a dark contest surface, and the side that's ahead is a solid beef-red field.
+// home and away: beef's one recognisable shape. every duel, anywhere, is the home side
+// (whoever threw down the challenge) in the cobalt kit against the away side in white.
+// the leader is called out in words and on the gap bar, never by swapping kits.
 
 export function StatusPill({ d }: { d: Duel }) {
   return (
@@ -41,8 +42,8 @@ export function VersusBar({ a, b, className }: { a: number | null; b: number | n
   const left = 50 + diff * 4.5;
   return (
     <div className={cx("relative flex h-[6px]", className)} aria-hidden>
-      <div className={cx("h-full transition-all duration-700", a >= b ? "bg-brand" : "bg-ink/35")} style={{ width: `${left}%` }} />
-      <div className={cx("h-full flex-1", b > a ? "bg-brand" : "bg-ink")} />
+      <div className="h-full bg-brand transition-all duration-700" style={{ width: `${left}%` }} />
+      <div className="h-full flex-1 bg-silver" />
       <div className="absolute -top-1 left-1/2 h-[14px] w-[2px] -translate-x-1/2 bg-bg" />
     </div>
   );
@@ -51,8 +52,8 @@ export function VersusBar({ a, b, className }: { a: number | null; b: number | n
 /** the inked result stamp */
 export function ResultStamp({ kind, className }: { kind: "won" | "lost" | "draw" | "final"; className?: string }) {
   return (
-    <span className={cx("stamp", kind === "won" ? "border-current" : kind === "lost" ? "border-current opacity-60" : "border-current", className)}>
-      {kind}
+    <span className={cx("stamp", kind === "won" ? "border-ink bg-ink text-inverse" : kind === "lost" ? "border-silver text-silver" : "border-current", className)}>
+      {kind === "won" ? "W" : kind === "lost" ? "L" : kind}
     </span>
   );
 }
@@ -81,7 +82,7 @@ export function DuelCard({ d, compact }: { d: Duel; compact?: boolean }) {
   const { s, now, live, perf, done, draw, isLead, pot, showRet } = useDuelState(d, compact ? 30_000 : 1000);
   const group = perf.length > 2;
   return (
-    <Link href={`/duel/${d.id}`} className="group block min-w-0 border-2 border-ink transition active:translate-x-px active:translate-y-px">
+    <Link href={`/duel/${d.id}`} className="group block min-w-0 border-2 border-ink bg-surface transition hover:shadow-pop active:translate-x-px active:translate-y-px">
       <div className="meta flex items-center justify-between gap-2 border-b-2 border-ink px-3 py-1.5">
         <span className="flex min-w-0 items-center gap-2 overflow-hidden">
           {done ? <span className="font-bold text-ink">final</span> : <StatusPill d={d} />}
@@ -96,10 +97,11 @@ export function DuelCard({ d, compact }: { d: Duel; compact?: boolean }) {
           const lead = isLead(p);
           const lost = done && !draw && !lead;
           return (
-            <div key={p.ticker} className={cx("min-w-0", group ? "flex items-center gap-3 px-3 py-2" : "px-3 pb-3 pt-2", lead && "field", !group && i === 1 && "border-l-2 border-bg", group && i > 0 && "border-t border-bg/20", lost && "opacity-55")}>
+            <div key={p.ticker} className={cx("min-w-0", group ? "flex items-center gap-3 px-3 py-2" : "px-3 pb-3 pt-2", i === 0 ? "home-kit" : !group && "away-kit", !group && i === 1 && "border-l-2 border-ink", group && i > 0 && "border-t border-slab-text/15", lost && "opacity-50")}>
               <div className={cx("flex min-w-0 items-center gap-1.5", group && "w-28 shrink-0")}>
                 <Avatar user={u} size={18} />
-                <span className="meta truncate font-bold">{u ? u.displayName.split(" ")[0] : "open spot"}{lead && !done && " · leads"}{lead && done && " · w"}</span>
+                <span className="meta truncate font-bold">{u ? u.displayName.split(" ")[0] : "open spot"}{lead && !done && " · leads"}</span>
+                {lead && done && <span className="meta ml-auto bg-ink px-1 font-bold text-inverse">W</span>}
               </div>
               <p className={cx("cond mt-2 leading-none", group ? "mt-0 w-20 text-[24px]" : compact ? "text-[26px]" : "text-[30px]", lost && "line-through decoration-[3px]")}>{p.ticker}</p>
               <p className={cx("cond leading-[.85] tracking-[-0.02em]", group ? "ml-auto text-[28px]" : compact ? "mt-1 text-[38px]" : "mt-1 text-[48px]", !showRet && "opacity-40")}>{showRet ? fmtRet(p.ret) : "—"}</p>
@@ -126,14 +128,14 @@ export function VersusHero({ d, meId }: { d: Duel; meId?: string | null }) {
         const lead = isLead(p);
         const lost = done && !draw && !lead;
         return (
-          <div key={p.ticker} className={cx("relative overflow-hidden px-4", group ? "py-3" : "py-5", lead && "field", i > 0 && "border-t-[3px] border-ink", lost && "text-slab-muted")}>
+          <div key={p.ticker} className={cx("relative overflow-hidden px-4", group ? "py-3" : "py-5", i === 0 ? "home-kit" : !group && "away-kit", i > 0 && "border-t-[4px] border-ink", lost && "opacity-55")}>
             {/* the ticker as image, bleeding off the edge */}
-            <span aria-hidden className={cx("cond pointer-events-none absolute -bottom-5 -right-3 select-none leading-none opacity-[.12]", group ? "text-[110px]" : "text-[170px]")}>{p.ticker}</span>
+            <span aria-hidden className={cx("cond pointer-events-none absolute -bottom-6 -right-2 select-none leading-none opacity-[.13]", group ? "text-[110px]" : "text-[190px]")}>{i + 1}</span>
             <div className="relative flex items-center gap-2">
               <Avatar user={u} size={group ? 22 : 26} />
               <Link href={u ? `/u/${u.username}` : "#"} className="meta truncate font-bold hover:underline">{u ? u.displayName : "open spot"}{u?.id === meId && " (you)"}</Link>
               <span className="meta ml-auto shrink-0 font-bold">
-                {lead && live && gap != null ? `leads by ${gap.toFixed(2)}` : lead && done ? "winner" : lost ? "loses" : !p.accepted ? "hasn't accepted" : ""}
+                {i === 0 ? "home" : "away"}{lead && live && gap != null ? ` · leads by ${gap.toFixed(2)}` : lead && done ? " · winner" : lost ? " · loses" : !p.accepted ? " · hasn't accepted" : ""}
               </span>
             </div>
             <div className={cx("relative flex items-end gap-4", group ? "mt-1" : "mt-3")}>

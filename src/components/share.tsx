@@ -32,7 +32,7 @@ export async function shareLink(path: string, text: string, title = "beef") {
 // ---------- image cards ----------
 
 const W = 1080, H = 1350;
-const C = { bg: "#ECE6D9", ink: "#121110", muted: "#6A645B", brand: "#EB4024", brandText: "#B5230E", gain: "#1A6B40", loss: "#8B2E44", line: "#CFC6B4", gold: "#866019", slabText: "#EFE9DC", slabMuted: "#8F887D" };
+const C = { bg: "#F3F5FA", ink: "#0A1033", muted: "#5A6378", brand: "#1F3BFF", brandText: "#1F3BFF", gain: "#067049", loss: "#B92F36", line: "#D3D9E6", gold: "#A87012", slabText: "#FFFFFF", slabMuted: "#8B94B3", silver: "#B9C0CF" };
 
 function rr(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
   ctx.beginPath();
@@ -45,33 +45,35 @@ function rr(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: n
 }
 
 /** the app's own self-hosted faces (next/font exposes their family names as css variables) */
-function family(v: "--font-display" | "--font-mono" | "--font-serif") {
+function family(v: "--font-display" | "--font-mono" | "--font-num" | "--font-ui") {
   const f = typeof document !== "undefined" ? getComputedStyle(document.documentElement).getPropertyValue(v).trim() : "";
   return `${f ? f + ", " : ""}system-ui, sans-serif`;
 }
 function font(weight: number, size: number, kind: "display" | "body" | "cond" | "mono" | "serif" = "display") {
-  if (kind === "mono") return `${weight} ${size}px ${family("--font-mono")}`;
-  if (kind === "serif") return `italic ${weight} ${size}px ${family("--font-serif")}`;
-  return `${weight} ${size}px ${family("--font-display")}`;
+  if (kind === "mono") return `${weight} ${size}px ${family("--font-num")}`;
+  if (kind === "serif" || kind === "body") return `${weight} ${size}px ${family("--font-ui")}`;
+  return `${kind === "cond" ? "italic " : ""}${weight} ${size}px ${family("--font-display")}`;
 }
 /** sets the font; condensed comes from fontStretch (the canvas font string can't carry it everywhere) */
 function setF(ctx: CanvasRenderingContext2D, weight: number, size: number, kind: "display" | "body" | "cond" | "mono" | "serif" = "display") {
   ctx.font = font(weight, size, kind);
-  (ctx as CanvasRenderingContext2D & { fontStretch?: string }).fontStretch = kind === "cond" ? "extra-condensed" : "normal";
+  (ctx as CanvasRenderingContext2D & { fontStretch?: string }).fontStretch = "normal";
 }
 function rule(ctx: CanvasRenderingContext2D, y: number, w = 4, color = C.ink) { ctx.fillStyle = color; ctx.fillRect(0, y, W, w); }
 
 function brandHeader(ctx: CanvasRenderingContext2D) {
   ctx.fillStyle = C.bg; ctx.fillRect(0, 0, W, H);
-  ctx.fillStyle = C.brand; ctx.fillRect(64, 64, 72, 72);
-  ctx.fillStyle = "#F6F2E9"; rr(ctx, 77, 80, 34, 26, 6); ctx.fill();
-  ctx.fillStyle = C.ink; rr(ctx, 95, 98, 30, 22, 6); ctx.fill();
-  ctx.fillStyle = C.ink; setF(ctx, 900, 76, "cond"); ctx.textBaseline = "middle";
-  ctx.fillText("BEEF", 152, 104);
-  ctx.fillStyle = C.muted; setF(ctx, 500, 22, "mono"); ctx.textAlign = "right";
-  ctx.fillText("PUT YOUR MONEY WHERE YOUR MOUTH IS", W - 64, 104);
+  // the midnight bar with the wordmark: three speed stripes and a slanted BEEF
+  ctx.fillStyle = C.ink; ctx.fillRect(0, 0, W, 190);
+  ctx.fillStyle = C.brand; ctx.fillRect(0, 190, W, 8);
+  ctx.save(); ctx.transform(1, 0, -0.36, 1, 0, 0);
+  for (let i = 0; i < 3; i++) { ctx.fillStyle = C.brand; ctx.fillRect(64 + 40 + i * 22, 62, 12, 70); }
+  ctx.restore();
+  ctx.fillStyle = C.slabText; setF(ctx, 900, 96, "cond"); ctx.textBaseline = "middle";
+  ctx.fillText("BEEF", 164, 100);
+  ctx.fillStyle = C.slabMuted; setF(ctx, 700, 24, "mono"); ctx.textAlign = "right";
+  ctx.fillText("PUT YOUR MONEY WHERE YOUR MOUTH IS", W - 64, 100);
   ctx.textAlign = "left";
-  rule(ctx, 186, 6);
 }
 
 function footer(ctx: CanvasRenderingContext2D, date: string) {
@@ -116,22 +118,25 @@ export function drawTrophyCard(d: Duel, users: Record<string, User | undefined>)
   entries.forEach((e, i) => {
     const y = top + i * bandH;
     const won = !draw && st.winners.includes(e.userId);
-    ctx.fillStyle = won ? C.brand : C.ink; ctx.fillRect(0, y, W, bandH);
-    if (i > 0) { ctx.fillStyle = C.bg; ctx.fillRect(0, y, W, 6); }
+    const home = d.participants[0]?.userId === e.userId;
+    ctx.fillStyle = home ? C.brand : "#FFFFFF"; ctx.fillRect(0, y, W, bandH);
+    if (i > 0) { ctx.fillStyle = C.ink; ctx.fillRect(0, y, W, 8); }
+    ctx.save(); if (!won && !draw) ctx.globalAlpha = 0.55;
     // ticker as image, bleeding off the edge
-    ctx.save(); ctx.globalAlpha = 0.13; ctx.fillStyle = won ? C.ink : C.slabText; setF(ctx, 900, bandH * 1.15, "cond"); ctx.textBaseline = "alphabetic"; ctx.textAlign = "right";
-    ctx.beginPath(); ctx.rect(0, y, W, bandH); ctx.clip(); ctx.fillText(e.ticker, W + 30, y + bandH * 1.02); ctx.restore();
-    const fg = won ? C.ink : draw ? C.slabText : C.slabMuted;
+    ctx.save(); ctx.globalAlpha *= 0.14; ctx.fillStyle = home ? "#FFFFFF" : C.ink; setF(ctx, 900, bandH * 1.3, "cond"); ctx.textBaseline = "alphabetic"; ctx.textAlign = "right";
+    ctx.beginPath(); ctx.rect(0, y, W, bandH); ctx.clip(); ctx.fillText(home ? "1" : "2", W - 20, y + bandH * 1.08); ctx.restore();
+    const fg = home ? "#FFFFFF" : C.ink;
     ctx.fillStyle = fg; ctx.textBaseline = "alphabetic";
-    setF(ctx, 700, 22, "mono"); ctx.fillText(`@${users[e.userId]?.username ?? "?"}`.toUpperCase() + (won ? " · WINNER" : ""), 64, y + 50);
+    setF(ctx, 700, 24, "mono"); ctx.fillText(`${home ? "HOME" : "AWAY"} · @${users[e.userId]?.username ?? "?"}`.toUpperCase() + (won ? " · W" : ""), 64, y + 52);
     setF(ctx, 900, 72, "cond"); ctx.fillText(e.ticker, 64, y + 122);
     if (!won && !draw) { const tw = ctx.measureText(e.ticker).width; ctx.fillRect(60, y + 96, tw + 8, 7); }
     setF(ctx, 900, bandH > 280 ? 178 : bandH > 200 ? 132 : 96, "cond"); ctx.textAlign = "right";
     ctx.fillText(pct(e.returnPct).replace("-", "−"), W - 64, y + bandH - 34);
     ctx.textAlign = "left";
-    setF(ctx, 500, 20, "mono"); ctx.fillText(`$${e.startPrice.toFixed(2)} → $${e.endPrice.toFixed(2)}`, 64, y + bandH - 34);
+    setF(ctx, 600, 22, "mono"); ctx.fillText(`$${e.startPrice.toFixed(2)} → $${e.endPrice.toFixed(2)}`, 64, y + bandH - 34);
+    ctx.restore();
   });
-  stamp(ctx, draw ? "DRAW" : "FINAL", W - 190, 286, draw ? C.ink : C.brand);
+  stamp(ctx, draw ? "DRAW" : "FINAL", W - 190, 296, draw ? C.ink : C.brand);
   footer(ctx, `${sessionLabel(st.startSession)} → ${sessionLabel(st.endSession)}`);
   return canvas;
 }

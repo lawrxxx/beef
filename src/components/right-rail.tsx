@@ -98,7 +98,7 @@ export function TickerTape({ className }: { className?: string }) {
     </span>
   );
   return (
-    <div className={cx("overflow-hidden whitespace-nowrap bg-brand py-1.5 text-[rgb(18_17_16)]", className)} aria-label="stock prices">
+    <div className={cx("overflow-hidden whitespace-nowrap bg-brand py-1.5 text-brand-ink", className)} aria-label="stock prices">
       <div className="tape-run">{run("a")}{run("b")}</div>
     </div>
   );
