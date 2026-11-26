@@ -85,7 +85,12 @@ export async function runDiscovery(): Promise<{ network: string; results: Ticker
   const db = getAdminSupabase();
   if (!cfg || !api) throw new Error("chainlink data streams credentials aren't configured");
   if (!db) throw new Error("no database configured");
-  const feeds = await api.listFeeds();
+  let feeds;
+  try { feeds = await api.listFeeds(); }
+  catch (e) {
+    const err = e as Error & { statusCode?: number };
+    throw Object.assign(new Error(`chainlink listFeeds failed${err.statusCode ? ` (http ${err.statusCode})` : ""}: ${err.message || err.name || "no message"}`), { statusCode: err.statusCode, cause: e });
+  }
   const results = discoverStreams(feeds, cfg.network);
   const rows = results.filter((r) => r.status === "available").flatMap((r) => Object.values(r.streams)).map((s) => ({
     network: s!.network, ticker: s!.ticker, session: s!.session, stream_id: s!.streamId, name: s!.name, schema: s!.schema, decimals: s!.decimals, verifier: s!.verifier, discovered_at: new Date().toISOString(),

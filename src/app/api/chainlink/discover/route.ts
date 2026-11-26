@@ -14,6 +14,12 @@ export async function POST(req: Request) {
   try {
     return NextResponse.json(await runDiscovery());
   } catch (e) {
-    return NextResponse.json({ error: e instanceof Error ? e.message : "discovery failed" }, { status: 502 });
+    // report what went wrong without leaking credentials (sdk errors carry no secrets)
+    const err = e as Error & { statusCode?: number; code?: string; cause?: unknown };
+    const cause = err?.cause as (Error & { code?: string }) | undefined;
+    return NextResponse.json({
+      error: err?.message || "discovery failed", kind: err?.name ?? typeof e, statusCode: err?.statusCode ?? null, code: err?.code ?? null,
+      cause: cause ? `${cause.name ?? ""} ${cause.message ?? ""} ${cause.code ?? ""}`.trim() : null,
+    }, { status: 502 });
   }
 }
