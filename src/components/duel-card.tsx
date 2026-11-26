@@ -1,5 +1,6 @@
 "use client";
 
+import { deadlineLine } from "@/lib/expiration";
 import { fmtStake, formatUsdc, prizePoolUnits, stakeUnits } from "@/lib/stake";
 import Link from "next/link";
 import { Clock, Crown, Users } from "lucide-react";
@@ -92,7 +93,7 @@ export function DuelCard({ d, compact }: { d: Duel; compact?: boolean }) {
         ) : done ? (
           <span>{d.settlement!.status === "draw" ? "draw · stakes returned" : `won by ${d.settlement!.marginPct.toFixed(2)} pts`}</span>
         ) : d.status === "pending" ? (
-          <span>{d.deadlineLabel}</span>
+          <span>ends {deadlineLine(d)}</span>
         ) : (
           <span>{STATUS_LABEL[d.status]}</span>
         )}

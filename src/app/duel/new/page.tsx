@@ -7,11 +7,11 @@ import { ArrowLeft, Check, Copy, Globe, Info, Lock, Search, Share2, Users, X } f
 import dynamic from "next/dynamic";
 import type { Duel, User } from "@/lib/types";
 import { getAsset } from "@/lib/market/assets";
-import { deadlineOptions, nextCloseAfter, sessionCloseUtc } from "@/lib/market/calendar";
+import { EXPIRATION_COPY, EXPIRATION_TYPES, etLabel, localLabel, scheduleFor, startOpenFor, validateCustomDeadline, type ExpirationType } from "@/lib/expiration";
 import { createDuel, inviteLink, useBeef } from "@/lib/store/store";
 import { STAKE_MAX_UNITS, STAKE_MIN_UNITS, STAKE_PRESETS, fmtStake, formatUsdc, parseStakeInput, prizePoolUnits } from "@/lib/stake";
 import type { StakeWalletStatus } from "@/components/wallet/stake-balance";
-import { rivalsOf, useMe } from "@/lib/hooks";
+import { rivalsOf, useMe, useNow } from "@/lib/hooks";
 import { cx, marketTime} from "@/lib/format";
 import { Avatar, EmptyState, useAction } from "@/components/ui";
 import { StockPicker } from "@/components/stock-picker";
@@ -58,7 +58,8 @@ function NewDuelInner() {
   const [stakeChoice, setStakeChoice] = useState<string>("10"); // a preset, or "custom"
   const [customStake, setCustomStake] = useState("");
   const [wallet, setWallet] = useState<StakeWalletStatus>({ ready: false, reason: "checking your wallet…" });
-  const [deadlineId, setDeadlineId] = useState("week");
+  const [expiration, setExpiration] = useState<ExpirationType>("next_open");
+  const [customAt, setCustomAt] = useState(""); // datetime-local, in the viewer's own timezone
   const [visibility, setVisibility] = useState<Duel["visibility"]>("public");
   const [title, setTitle] = useState("");
   const [agree, setAgree] = useState(false);
@@ -67,9 +68,16 @@ function NewDuelInner() {
   const submitted = useRef(false);
   const [created, setCreated] = useState<Duel | null>(null);
 
-  const options = useMemo(() => deadlineOptions(new Date()), []);
-  const deadline = options.find((o) => o.id === deadlineId) ?? options[0];
-  const lockSession = useMemo(() => nextCloseAfter(new Date()), []);
+  // schedules are shown "if accepted now"; next market open / one week are fixed when the duel activates
+  const nowTick = useNow(60_000);
+  const now = useMemo(() => new Date(nowTick || Date.now()), [nowTick]);
+  const startIfNow = startOpenFor(now);
+  const customDate = customAt ? new Date(customAt) : null;
+  const customError = expiration === "custom" ? (customDate ? validateCustomDeadline(customDate, now) : "pick a date and time") : null;
+  const presetDeadline = (t: ExpirationType) => scheduleFor(t, now).deadline;
+  const deadline = expiration === "custom"
+    ? (customDate && !customError ? { deadline: customDate.toISOString(), label: etLabel(customDate) } : null)
+    : { deadline: presetDeadline(expiration).toISOString(), label: EXPIRATION_COPY[expiration].label };
 
   const friends = useMemo(() => {
     if (!me) return [] as User[];
@@ -106,7 +114,7 @@ function NewDuelInner() {
     picked.some((t) => !t) ? `pick ${slots} different stocks` : new Set(picked).size !== picked.length ? "each side needs a different stock" : null,
     !mine || !picked.includes(mine) ? "pick the stock you're backing" : mode === "group" && new Set(groupAssign.map((g) => g.ticker)).size !== groupAssign.length ? "each friend needs a different stock" : null,
     !stakeCheck.ok ? stakeCheck.error : !wallet.ready ? wallet.reason : null,
-    !deadline ? "pick a deadline" : null,
+    !deadline ? (customError ?? "pick a deadline") : null,
     !agree ? "agree to the terms to send it" : null,
   ];
   const blocked = problems[step];
@@ -133,7 +141,7 @@ function NewDuelInner() {
     const theirTicker = mode === "group" ? groupAssign[0].ticker : theirStocks[0];
     const d = await run(() => createDuel({
       myTicker: mine!, opponentTicker: theirTicker, opponentId: mode === "open" ? null : opponents[0], stake: Number(stakeLabel), // "35.50" → 35.5, stored as numeric(10,2)
-      deadline: deadline.deadline, deadlineLabel: deadline.label, visibility, title: title || undefined,
+      deadline: deadline!.deadline, deadlineLabel: deadline!.label, expirationType: expiration, visibility, title: title || undefined,
       extra: mode === "group" ? groupAssign.slice(1) : undefined,
     }), "challenge saved");
     setSubmitting(false);
@@ -326,18 +334,42 @@ function NewDuelInner() {
 
       {step === 4 && (
         <div className="space-y-2">
-          {options.map((o) => (
-            <button key={o.id} onClick={() => setDeadlineId(o.id)} aria-pressed={deadlineId === o.id} className={cx("card flex w-full items-center justify-between p-4 text-left transition", deadlineId === o.id && "border-ink ring-1 ring-ink")}>
-              <div>
-                <p className="font-semibold">{o.label}</p>
-                <p className="text-[13px] text-muted">ends {marketTime(o.deadline)}{o.note ? ` · ${o.note}` : ""}</p>
-              </div>
-              {deadlineId === o.id && <Check size={20} />}
-            </button>
-          ))}
+          <div role="radiogroup" aria-label="when does it end" className="space-y-2">
+            {EXPIRATION_TYPES.map((t) => {
+              const on = expiration === t;
+              const end = t === "custom" ? (customDate && !customError ? customDate : null) : presetDeadline(t);
+              return (
+                <button key={t} type="button" role="radio" aria-checked={on} onClick={() => setExpiration(t)}
+                  className={cx("card flex w-full items-start justify-between gap-3 p-4 text-left transition", on && "border-ink ring-1 ring-ink")}>
+                  <div className="min-w-0">
+                    <p className="font-semibold">{EXPIRATION_COPY[t].label}</p>
+                    <p className="text-[13px] text-muted">{EXPIRATION_COPY[t].description}</p>
+                    {end ? (
+                      <p className="mt-1 text-[13px] font-medium text-ink-soft">
+                        {t === "custom" ? "ends" : "ends (if accepted now)"} {etLabel(end)}
+                        <span className="block text-[12px] font-normal text-muted">your time: {localLabel(end)}</span>
+                      </p>
+                    ) : t === "custom" && <p className="mt-1 text-[13px] text-muted">choose below</p>}
+                  </div>
+                  <span className={cx("mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2", on ? "border-ink bg-ink text-inverse" : "border-line")}>{on && <Check size={14} />}</span>
+                </button>
+              );
+            })}
+          </div>
+          {expiration === "custom" && (
+            <div className="card p-4">
+              <label className="label" htmlFor="custom-deadline">deadline (your local time)</label>
+              <input id="custom-deadline" type="datetime-local" className="input" value={customAt} onChange={(e) => setCustomAt(e.target.value)}
+                aria-invalid={!!customAt && !!customError} aria-describedby="custom-deadline-hint" />
+              <p id="custom-deadline-hint" className={cx("mt-1 text-xs", customAt && customError ? "text-loss" : "text-muted")}>
+                {customAt && customError ? customError : customDate && !customError ? `${etLabel(customDate)} · ${localLabel(customDate)}` : "a trading day, during regular hours (9:30am–4:00pm et)"}
+              </p>
+            </div>
+          )}
+          <p className="text-[12px] text-muted">if accepted now, starting prices would lock at {etLabel(startIfNow)} ({localLabel(startIfNow)}).</p>
           <p className="flex items-start gap-2 rounded-xl bg-ink/[.03] p-3 text-[13px] text-ink-soft">
             <Info size={16} className="mt-0.5 shrink-0" />
-            starting prices lock at the first market close after everyone accepts (next: {marketTime(sessionCloseUtc(lockSession).toISOString())}). the result uses the official close on the deadline.
+            starting prices lock at the selected market open after both players accept. at the deadline, beef compares the latest valid chainlink feed prices using the same methodology. invalid or unavailable prices pause settlement.
           </p>
         </div>
       )}
@@ -352,7 +384,8 @@ function NewDuelInner() {
               ["your stake", `${stakeLabel} test usdc`],
               [participants > 2 ? "each friend's stake" : "their stake", `${stakeLabel} test usdc`],
               ["prize pool", `${potLabel} test usdc · winner takes all`],
-              ["deadline", `${deadline.label} · ${marketTime(deadline.deadline)}`],
+              ["starts", `the next market open after acceptance (if accepted now: ${etLabel(startIfNow)})`],
+              ["deadline", expiration === "custom" && deadline ? `${etLabel(new Date(deadline.deadline))} · your time ${localLabel(new Date(deadline.deadline))}` : `${EXPIRATION_COPY[expiration].label} (if accepted now: ${deadline ? etLabel(new Date(deadline.deadline)) : "—"})`],
               ["prices lock", "first official close after everyone's in"],
               ["network", "base sepolia (testnet)"],
               ["token", "usdc by circle (test, no monetary value)"],

@@ -2,6 +2,7 @@
 // needs a running app built with NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY pointing at a supabase
 // with email confirmations off, e.g. `npx supabase start` + `npx supabase db reset`.
 // usage: BASE_URL=http://localhost:3000 node e2e/supabase.js
+// eslint-disable-next-line @typescript-eslint/no-require-imports
 const { chromium, devices } = require('playwright');
 const B = process.env.BASE_URL || 'http://localhost:3000';
 let failures = 0;

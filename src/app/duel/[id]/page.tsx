@@ -17,6 +17,7 @@ import { canAccept, isParticipant, STATUS_LABEL } from "@/lib/derive";
 import { countdown, cx, marketTime, price, sessionLabel} from "@/lib/format";
 import { resolveEndSession, sessionCloseUtc, sessionDateOf } from "@/lib/market/calendar";
 import { txUrl } from "@/lib/chain/config";
+import { deadlineLine, deadlineText, etLabel, localLabel } from "@/lib/expiration";
 import { Avatar, CardSkeleton, EmptyState, Pct, QuoteLine, SourceBadge, UserLink, useAction } from "@/components/ui";
 import { StatusPill, VersusBar } from "@/components/duel-card";
 import { Comments, ReactionBar } from "@/components/social";
@@ -60,7 +61,7 @@ function DuelView({ d }: { d: Duel }) {
   const leader = live && sorted[0]?.ret != null && sorted[0].ret !== sorted[1]?.ret ? sorted[0] : null;
   const usersMap = Object.fromEntries(d.participants.map((p) => [p.userId, userById(s, p.userId)]));
   const opponent = !group && me ? d.participants.find((p) => p.userId && p.userId !== me.id) : undefined;
-  const endSession = d.lockAt ? resolveEndSession(new Date(d.deadline), sessionDateOf(new Date(d.lockAt))) : null;
+  const dl = deadlineText(d, new Date(now || Date.now()));
 
   const busyRun = async (fn: () => Promise<unknown>, ok?: string) => { setBusy(true); await run(fn, ok); setBusy(false); };
 
@@ -73,7 +74,7 @@ function DuelView({ d }: { d: Duel }) {
 
       {d.title && <h1 className="mb-1 font-display text-2xl font-bold tracking-tight">{d.title}</h1>}
       <p className="mb-4 text-[15px] text-muted">
-        {fmtStake(d.stake)} test usdc each · <b className="text-ink">{pot} test usdc pot</b> · {d.deadlineLabel}
+        {fmtStake(d.stake)} test usdc each · <b className="text-ink">{pot} test usdc pot</b> · ends {deadlineLine(d, new Date(now || Date.now()))}
         {d.communityId && <> · <Link className="underline" href={`/communities/${s.communities.find((c) => c.id === d.communityId)?.slug}`}>{s.communities.find((c) => c.id === d.communityId)?.name}</Link></>}
       </p>
 
@@ -116,7 +117,7 @@ function DuelView({ d }: { d: Duel }) {
           <div className="border-r p-3">
             <p className="text-xs text-muted">{done ? "ended" : live ? "time left" : d.status === "accepted" ? "prices lock in" : d.status === "awaiting_verification" ? "status" : "length"}</p>
             <p className="num mt-0.5 font-semibold">
-              {done ? sessionLabel(st.endSession) : live ? countdown(d.deadline, now) : d.status === "accepted" && d.lockAt ? countdown(d.lockAt, now) : d.status === "awaiting_verification" ? "paused" : d.deadlineLabel}
+              {done ? sessionLabel(st.endSession) : live ? countdown(d.deadline, now) : d.status === "accepted" && d.startAt ? countdown(d.startAt, now) : d.status === "awaiting_verification" ? "paused" : (dl.rule ?? dl.et)}
             </p>
           </div>
           <div className="border-r p-3">
@@ -161,7 +162,7 @@ function DuelView({ d }: { d: Duel }) {
         {d.status === "accepted" && (
           <div className="card p-4">
             <p className="flex items-center gap-2 font-semibold"><Lock size={17} /> everyone's in. terms are locked.</p>
-            <p className="mt-1 text-sm text-muted">starting prices lock at the official close: {d.lockAt && marketTime(d.lockAt)}. the duel goes live then.</p>
+            <p className="mt-1 text-sm text-muted">starting prices lock at the market open: {d.startAt && `${etLabel(new Date(d.startAt))} (${localLabel(new Date(d.startAt))})`}. the duel goes live then and ends {dl.et}.</p>
           </div>
         )}
         {d.status === "awaiting_verification" && st && (
@@ -220,8 +221,8 @@ function DuelView({ d }: { d: Duel }) {
             </table>
           </div>
           <div className="space-y-1 border-t bg-ink/[.015] px-4 py-3 text-xs text-muted">
-            {d.startSnapshots[0] && <p>start: chainlink price at the {sessionLabel(d.startSnapshots[0].session)} close · {marketTime(d.startSnapshots[0].timestamp)}</p>}
-            {d.endSnapshots[0] ? <p>end: chainlink price at the {sessionLabel(d.endSnapshots[0].session)} close · {marketTime(d.endSnapshots[0].timestamp)}</p> : endSession && <p>end: chainlink price at the {sessionLabel(endSession)} close · {marketTime(sessionCloseUtc(endSession).toISOString())}</p>}
+            {(d.startSnapshots[0] || d.startAt) && <p>start: first chainlink feed update at or after {etLabel(new Date(d.startSnapshots[0]?.timestamp ?? d.startAt!))}</p>}
+            <p>end: first chainlink feed update at or after {dl.et}{dl.exact ? "" : " (fixed when the duel starts)"} · your time {dl.local}</p>
             {[...d.startSnapshots, ...d.endSnapshots].filter((x) => x.streamId).map((x) => (
               <p key={`${x.ticker}${x.kind}`} className="font-mono text-[11px]">{x.ticker} {x.kind}: {x.streamId!.length === 42 ? "feed" : "stream"} {x.streamId!.slice(0, 10)}…{x.streamId!.slice(-4)}{x.roundId ? ` · round ${x.roundId}` : ""} · updated {x.observationsTimestamp ? new Date(x.observationsTimestamp * 1000).toISOString().slice(0, 19).replace("T", " ") + "z" : "—"} · report {x.reportHash?.slice(0, 10)}… · {x.verification?.status === "verified" ? "verified by chainlink's verifier (base sepolia)" : x.verification?.status === "onchain" ? <a className="underline" href={`https://basescan.org/address/${x.streamId}#readContract`} target="_blank" rel="noreferrer">chainlink feed on base mainnet</a> : `verification: ${x.verification?.status ?? "none"}`}</p>
             ))}
@@ -247,7 +248,8 @@ function DuelView({ d }: { d: Duel }) {
               ["prize pool", `${pot} test usdc`],
               ["comparison", "percentage return from chainlink prices at the lock and end closes"],
               ["price lock", d.terms.priceRule],
-              ["deadline", marketTime(d.deadline)],
+              ["starts", d.startAt ? `${etLabel(new Date(d.startAt))} · your time ${localLabel(new Date(d.startAt))}` : "the next market open after everyone accepts"],
+              ["deadline", `${deadlineLine(d, new Date(now || Date.now()))} · your time ${dl.local}`],
               ["settlement", d.terms.settlementRule],
               ["price data", d.terms.methodology === "chainlink_regular_hours_mid_v1" ? "chainlink data streams · 24/5 us equities, verified with chainlink's base sepolia verifier" : "chainlink data feeds on base mainnet (coinbase tokenized stocks, total-return), read onchain"],
               ["market timezone", "america/new_york (et). stored in utc."],

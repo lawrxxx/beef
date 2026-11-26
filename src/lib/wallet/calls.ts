@@ -60,8 +60,34 @@ export function buildRefundCalls(p: { escrow: Address; duelId: string }): Call[]
   return [{ to: p.escrow, value: 0n, data: encodeFunctionData({ abi: BEEF_ESCROW_ABI, functionName: "refund", args: [duelIdToBytes32(p.duelId)] }) }];
 }
 
+/** settle() on escrows deployed before v3 (0xAe3a…, 0x760c…): winners chosen offchain, bound by a signed hash */
+export const LEGACY_SETTLE_ABI = parseAbi(["function settle(bytes32 duelId, address[] winners, bytes32 settlementHash, bytes oracleSig)"]);
+
 export function buildSettleCalls(p: { escrow: Address; duelId: string; winners: Address[]; settlementHash: Hex; oracleSig: Hex }): Call[] {
-  return [{ to: p.escrow, value: 0n, data: encodeFunctionData({ abi: BEEF_ESCROW_ABI, functionName: "settle", args: [duelIdToBytes32(p.duelId), p.winners, p.settlementHash, p.oracleSig] }) }];
+  return [{ to: p.escrow, value: 0n, data: encodeFunctionData({ abi: LEGACY_SETTLE_ABI, functionName: "settle", args: [duelIdToBytes32(p.duelId), p.winners, p.settlementHash, p.oracleSig] }) }];
+}
+
+/** escrow v3 price result (arrays in the escrow's participant order) */
+export interface EscrowResult {
+  startPrices: bigint[];
+  endPrices: bigint[];
+  startTimes: bigint[];
+  endTimes: bigint[];
+  startAt: bigint;
+  endAt: bigint;
+  maxDelay: bigint;
+  evidenceHash: Hex;
+}
+export const RESULT_ABI_TYPE = {
+  type: "tuple", components: [
+    { name: "startPrices", type: "uint256[]" }, { name: "endPrices", type: "uint256[]" },
+    { name: "startTimes", type: "uint64[]" }, { name: "endTimes", type: "uint64[]" },
+    { name: "startAt", type: "uint64" }, { name: "endAt", type: "uint64" }, { name: "maxDelay", type: "uint64" }, { name: "evidenceHash", type: "bytes32" },
+  ],
+} as const;
+
+export function buildSettleWithPricesCalls(p: { escrow: Address; duelId: string; result: EscrowResult; oracleSig: Hex }): Call[] {
+  return [{ to: p.escrow, value: 0n, data: encodeFunctionData({ abi: BEEF_ESCROW_ABI, functionName: "settleWithPrices", args: [duelIdToBytes32(p.duelId), p.result, p.oracleSig] }) }];
 }
 
 /** decodes a smart account's user operation callData into the calls it will make */

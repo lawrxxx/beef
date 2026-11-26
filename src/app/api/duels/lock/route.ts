@@ -11,13 +11,14 @@ export async function POST(req: Request) {
   const ctx = await resolveRequest(req, "lock");
   if (!ctx.ok) return ctx.res;
   if (ctx.duel.status !== "accepted") return NextResponse.json({ error: `duel is ${ctx.duel.status}` }, { status: 409 });
-  const prices = chainlinkPrices();
-  if (!prices) return NextResponse.json({ error: "chainlink data streams isn't configured, so prices can't be locked" }, { status: 503 });
-  const r = await lockStartPrices(ctx.duel, prices, ctx.now);
+  const r = await lockStartPrices(ctx.duel, chainlinkPrices(), ctx.now);
+  const db = getAdminSupabase()!;
   if (r.ok) {
-    const db = getAdminSupabase()!;
     await saveSnapshots(db, ctx.duel.id, r.snapshots);
-    await db.from("duels").update({ status: "active", lock_at: r.lockAt, activated_at: r.lockAt }).eq("id", ctx.duel.id).eq("status", "accepted");
+    await db.from("duels").update({ status: "active", lock_at: r.startAt }).eq("id", ctx.duel.id).eq("status", "accepted");
+  } else if (!r.pending) {
+    // a starting price was missing or invalid: pause, never guess
+    await db.from("duels").update({ status: "awaiting_verification", lock_at: r.startAt }).eq("id", ctx.duel.id).eq("status", "accepted");
   }
-  return NextResponse.json({ ok: r.ok, lockAt: r.lockAt, issues: r.issues });
+  return NextResponse.json({ ok: r.ok, pending: r.pending, startAt: r.startAt, issues: r.issues });
 }

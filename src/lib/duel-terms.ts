@@ -3,10 +3,10 @@ import { CALCULATION_VERSION } from "@/lib/settlement/engine";
 
 /** the terms every beef duel records at creation (immutable once accepted) */
 export const DEFAULT_TERMS: DuelTerms = {
-  methodology: "chainlink_data_feeds_total_return_v1",
-  provider: "chainlink-data-streams",
+  methodology: "chainlink_data_feeds_open_v2",
+  provider: "chainlink-data-feeds",
   marketTimezone: "America/New_York",
-  priceRule: "starting prices lock at the first official close after everyone has joined, and ending prices at the close of the deadline session: each is the value of the stock's chainlink data feed on base mainnet in effect at the close (total-return, so splits and dividends are included).",
+  priceRule: "starting prices lock at the first us market open (9:30am et) after both players accept; ending prices at the deadline. each is the first update of the stock's chainlink data feed on base mainnet at or after that time, within the maximum delay (total-return, so splits and dividends are included). these are chainlink feed observations, not official exchange auction prices.",
   settlementRule: "higher percentage return wins. identical returns (to 0.0001 points) are a draw and every stake is returned. weekend or holiday deadlines use the last close at or before the deadline; if that is not after the lock, the next trading session.",
   calculationVersion: CALCULATION_VERSION,
   funding: "base_sepolia_usdc",

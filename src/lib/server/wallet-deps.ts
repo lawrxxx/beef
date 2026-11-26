@@ -2,6 +2,7 @@ import "server-only";
 import { NextResponse } from "next/server";
 import { createPublicClient, http, type Hex } from "viem";
 import { resolveDuelEscrow } from "@/lib/wallet/escrow-resolve";
+import { etLabel, scheduleFor, startOpenFor, type ExpirationType } from "@/lib/expiration";
 import { BEEF_ESCROW_ABI } from "@/lib/wallet/escrow-abi";
 import { CHAIN, ESCROW_ADDRESS } from "@/lib/chain/config";
 import { getAdminSupabase, getServerSupabase } from "@/lib/supabase/server";
@@ -32,7 +33,7 @@ export async function appUserId(): Promise<string | null> {
 export async function loadDuelForChain(duelId: string): Promise<DuelForChain | null> {
   const db = getAdminSupabase();
   if (!db) throw new WalletError("beef isn't connected to its database", 503);
-  const { data: d } = await db.from("duels").select("id,created_by,status,stake,deadline,calculation_version,methodology,is_open,escrow_state,duel_settlements(status,winner_ids,payload)").eq("id", duelId).maybeSingle();
+  const { data: d } = await db.from("duels").select("id,created_by,status,stake,deadline,calculation_version,methodology,is_open,escrow_state,expiration_type,duel_settlements(status,winner_ids,payload)").eq("id", duelId).maybeSingle();
   if (!d) return null;
   const { data: ps } = await db.from("duel_participants").select("user_id,ticker").eq("duel_id", duelId);
   const parts = (ps ?? []).map((p: any) => ({ userId: p.user_id ?? "", ticker: p.ticker }));
@@ -42,6 +43,7 @@ export async function loadDuelForChain(duelId: string): Promise<DuelForChain | n
     calculationVersion: d.calculation_version, methodology: d.methodology, participants: parts,
     open: !!(d as any).is_open,
     escrowState: (d as any).escrow_state,
+    expirationType: (d as any).expiration_type ?? undefined,
     settlement: settlementOf((d as any).duel_settlements),
   };
 }
@@ -105,6 +107,26 @@ export function cachedVerifier(): EndUserVerifier & { last?: VerifiedEndUser } {
  * applies a verified onchain result to the database (service role). called exactly once
  * per confirmed intent, after the receipt and escrow event were checked.
  */
+/**
+ * activation: once everyone has joined (status 'accepted'), fix the schedule exactly once.
+ * start = the first market open after activation; next_open / one_week deadlines are computed
+ * from it, custom deadlines stay as agreed (they were checked before the join was allowed).
+ */
+export async function activateIfReady(duelId: string, now: Date) {
+  const db = getAdminSupabase();
+  if (!db) return;
+  const { data: d } = await db.from("duels").select("id,status,start_at,expiration_type,deadline").eq("id", duelId).maybeSingle();
+  if (!d || d.status !== "accepted" || d.start_at) return;
+  const type = (d.expiration_type ?? "custom") as ExpirationType;
+  let sched: { startAt: Date; deadline: Date };
+  try { sched = scheduleFor(type, now, d.deadline); }
+  catch { sched = { startAt: startOpenFor(now), deadline: new Date(d.deadline) }; } // custom that turned invalid: settlement will reject, never guess
+  const patch: Record<string, string> = { start_at: sched.startAt.toISOString(), activated_at: now.toISOString() };
+  if (type !== "custom") { patch.deadline = sched.deadline.toISOString(); patch.deadline_label = etLabel(sched.deadline); }
+  const { error } = await db.from("duels").update(patch).eq("id", duelId).eq("status", "accepted").is("start_at", null);
+  if (error) throw new Error(`activation: ${error.message}`);
+}
+
 export async function applyConfirmed(i: { action: string; duelId: string; userId: string; txHash: string }) {
   const db = getAdminSupabase();
   if (!db) return;
@@ -113,7 +135,10 @@ export async function applyConfirmed(i: { action: string; duelId: string; userId
     if (error) throw new Error(`${fn}: ${error.message}`);
   };
   if (i.action === "create") await call("set_escrow_state", { p_duel: i.duelId, p_state: "funded", p_tx: i.txHash });
-  else if (i.action === "accept") await call("accept_duel_for", { p_duel: i.duelId, p_user: i.userId, p_tx: i.txHash });
+  else if (i.action === "accept") {
+    await call("accept_duel_for", { p_duel: i.duelId, p_user: i.userId, p_tx: i.txHash });
+    await activateIfReady(i.duelId, new Date());
+  }
   else if (i.action === "settle") await call("set_escrow_state", { p_duel: i.duelId, p_state: "settled", p_tx: i.txHash });
   else if (i.action === "refund") await call("set_escrow_state", { p_duel: i.duelId, p_state: "refunded", p_tx: i.txHash });
 }

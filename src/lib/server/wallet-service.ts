@@ -2,6 +2,7 @@ import "server-only";
 import { decodeEventLog, getAddress, isAddress, isHex, parseAbi, type Address, type Hex, type TransactionReceipt } from "viem";
 import { CHAIN_ID, ENTRYPOINTS, ESCROW_ADDRESS, USDC_ADDRESS, assertBaseSepolia, isKnownEscrow } from "@/lib/chain/config";
 import { formatUsdc, stakeUnits, stakeWithinLimits, STAKE_MAX, STAKE_MIN } from "@/lib/stake";
+import { validateCustomDeadline } from "@/lib/expiration";
 import {
   OPEN_SLOT, buildCreateDuelCalls, buildJoinCalls, buildRefundCalls, buildSettleCalls, callsHash, decodeSmartAccountCallData, deserializeCalls,
   duelIdToBytes32, serializeCalls, termsHash, escrowOfCalls, type Call,
@@ -67,6 +68,8 @@ export interface DuelForChain {
   participants: { userId: string; ticker: string }[];
   /** open public challenge: anyone (but the creator) may take the empty slot */
   open?: boolean;
+  /** next_open | one_week | custom (custom deadlines are checked again before anyone joins) */
+  expirationType?: string;
   /** escrow state as recorded from verified onchain events */
   escrowState?: "unfunded" | "funded" | "active" | "settled" | "refunded";
   /** present once beef's settlement service has a final result */
@@ -146,11 +149,18 @@ export async function prepareIntent(
     if (duel.escrowState !== "funded") throw new WalletError("the creator hasn't locked their stake yet. you can accept once they have.", 409);
     if (!deps.signJoin) throw new WalletError("joining duels isn't configured on the server yet", 503);
     if (escrow === current && !stakeOk) throw new WalletError(`stakes must be between ${STAKE_MIN} and ${STAKE_MAX} test usdc`, 400);
+    // a custom deadline must still fall after the market open this join would start the duel at
+    if (duel.expirationType === "custom") {
+      const err = validateCustomDeadline(new Date(duel.deadline), deps.now ?? new Date());
+      if (err) throw new WalletError(`this challenge can't start any more: ${err}`, 409);
+    }
     amount = duel.stake;
     const joinSig = await deps.signJoin({ escrow, duelId: duel.id, who: link.smartAccount });
     calls = buildJoinCalls({ usdc, escrow, duelId: duel.id, stake: duel.stake, joinSig });
   } else if (p.action === "settle") {
-    // payout: the server signs the final result; any participant can submit it
+    // escrow v3 is paid by beef's settlement relay (it computes the winner from signed prices)
+    if (ESCROW_ADDRESS && escrow === ESCROW_ADDRESS) throw new WalletError("beef's settlement relay sends this payout automatically.", 409);
+    // payout on a pre-v3 escrow: the server signs the final result; any participant can submit it
     const st = duel.settlement;
     if (!st || st.status === "needs_verification") throw new WalletError("this duel isn't settled yet. payouts unlock after verified closing prices.", 409);
     if (!deps.sign) throw new WalletError("payouts aren't configured on the server yet", 503);

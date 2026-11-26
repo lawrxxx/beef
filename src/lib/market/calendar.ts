@@ -1,5 +1,9 @@
-// us equity market calendar (nyse/nasdaq regular sessions).
-// all instants are handled as utc; session dates are yyyy-mm-dd in America/New_York.
+// us equity market calendar (nyse/nasdaq regular sessions: 9:30am–4:00pm et, 1:00pm on early closes).
+// holidays and early closes follow the nyse published holiday & trading-hours schedule
+// (nasdaq observes the same days). all instants are utc; session dates are yyyy-mm-dd in
+// America/New_York, and dst comes from the iana timezone database via Intl.
+// unscheduled closures and trading halts can't be known in advance: settlement detects them
+// as missing or stale chainlink feed data and pauses for verification.
 
 export const MARKET_TZ = "America/New_York";
 
@@ -194,3 +198,24 @@ export function resolveEndSession(deadline: Date, lockSession: string): string {
   const s = lastCloseAtOrBefore(deadline);
   return s > lockSession ? s : nextTradingDay(lockSession);
 }
+
+/** dates inside the maintained calendar range (deadlines outside it are refused) */
+export const inCalendarRange = (session: string) => session >= CALENDAR_RANGE.from && session <= CALENDAR_RANGE.to;
+
+/** first regular-session open strictly after the instant */
+export function nextOpenAfter(at: Date): Date {
+  let s = sessionDateOf(at);
+  if (isTradingDay(s) && sessionOpenUtc(s).getTime() > at.getTime()) return sessionOpenUtc(s);
+  s = nextTradingDay(s);
+  return sessionOpenUtc(s);
+}
+
+/** first regular-session open at or after the instant */
+export function nextOpenAtOrAfter(at: Date): Date {
+  const s = sessionDateOf(at);
+  if (isTradingDay(s) && sessionOpenUtc(s).getTime() >= at.getTime()) return sessionOpenUtc(s);
+  return sessionOpenUtc(nextTradingDay(s));
+}
+
+/** is the instant inside a regular session (open inclusive, close exclusive)? */
+export const isRegularSession = (at: Date) => isMarketOpen(at);

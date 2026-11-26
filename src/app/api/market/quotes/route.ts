@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getAsset } from "@/lib/market/assets";
 import { clientKey, rateLimit } from "@/lib/server/rate-limit";
-import { PRICE_SOURCE, liveQuotes } from "@/lib/server/chainlink";
+import { liveQuotes } from "@/lib/server/chainlink";
 
 export const dynamic = "force-dynamic";
 
@@ -12,5 +12,5 @@ export async function GET(req: Request) {
   const tickers = (new URL(req.url).searchParams.get("tickers") ?? "")
     .split(",").map((t) => t.trim().toUpperCase()).filter((t) => getAsset(t)).slice(0, 10);
   const quotes = await liveQuotes(tickers);
-  return NextResponse.json({ provider: PRICE_SOURCE === "data_feeds" ? "chainlink-data-feeds" : "chainlink-data-streams", simulated: false, quotes });
+  return NextResponse.json({ provider: "chainlink-data-feeds", simulated: false, quotes });
 }

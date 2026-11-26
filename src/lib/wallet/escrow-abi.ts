@@ -231,6 +231,19 @@ export const BEEF_ESCROW_ABI = [
     "type": "function"
   },
   {
+    "inputs": [],
+    "name": "MAX_RESOLUTION_DELAY",
+    "outputs": [
+      {
+        "internalType": "uint64",
+        "name": "",
+        "type": "uint64"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
     "inputs": [
       {
         "internalType": "bytes32",
@@ -441,24 +454,62 @@ export const BEEF_ESCROW_ABI = [
         "type": "bytes32"
       },
       {
-        "internalType": "address[]",
-        "name": "winners",
-        "type": "address[]"
-      },
-      {
-        "internalType": "bytes32",
-        "name": "settlementHash",
-        "type": "bytes32"
-      },
-      {
-        "internalType": "bytes",
-        "name": "oracleSig",
-        "type": "bytes"
+        "components": [
+          {
+            "internalType": "uint256[]",
+            "name": "startPrices",
+            "type": "uint256[]"
+          },
+          {
+            "internalType": "uint256[]",
+            "name": "endPrices",
+            "type": "uint256[]"
+          },
+          {
+            "internalType": "uint64[]",
+            "name": "startTimes",
+            "type": "uint64[]"
+          },
+          {
+            "internalType": "uint64[]",
+            "name": "endTimes",
+            "type": "uint64[]"
+          },
+          {
+            "internalType": "uint64",
+            "name": "startAt",
+            "type": "uint64"
+          },
+          {
+            "internalType": "uint64",
+            "name": "endAt",
+            "type": "uint64"
+          },
+          {
+            "internalType": "uint64",
+            "name": "maxDelay",
+            "type": "uint64"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "evidenceHash",
+            "type": "bytes32"
+          }
+        ],
+        "internalType": "struct BeefEscrow.Result",
+        "name": "r",
+        "type": "tuple"
       }
     ],
-    "name": "settle",
-    "outputs": [],
-    "stateMutability": "nonpayable",
+    "name": "resultDigest",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "view",
     "type": "function"
   },
   {
@@ -469,30 +520,61 @@ export const BEEF_ESCROW_ABI = [
         "type": "bytes32"
       },
       {
-        "internalType": "bytes32",
-        "name": "termsHash",
-        "type": "bytes32"
+        "components": [
+          {
+            "internalType": "uint256[]",
+            "name": "startPrices",
+            "type": "uint256[]"
+          },
+          {
+            "internalType": "uint256[]",
+            "name": "endPrices",
+            "type": "uint256[]"
+          },
+          {
+            "internalType": "uint64[]",
+            "name": "startTimes",
+            "type": "uint64[]"
+          },
+          {
+            "internalType": "uint64[]",
+            "name": "endTimes",
+            "type": "uint64[]"
+          },
+          {
+            "internalType": "uint64",
+            "name": "startAt",
+            "type": "uint64"
+          },
+          {
+            "internalType": "uint64",
+            "name": "endAt",
+            "type": "uint64"
+          },
+          {
+            "internalType": "uint64",
+            "name": "maxDelay",
+            "type": "uint64"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "evidenceHash",
+            "type": "bytes32"
+          }
+        ],
+        "internalType": "struct BeefEscrow.Result",
+        "name": "r",
+        "type": "tuple"
       },
       {
-        "internalType": "address[]",
-        "name": "winners",
-        "type": "address[]"
-      },
-      {
-        "internalType": "bytes32",
-        "name": "settlementHash",
-        "type": "bytes32"
+        "internalType": "bytes",
+        "name": "oracleSig",
+        "type": "bytes"
       }
     ],
-    "name": "settlementDigest",
-    "outputs": [
-      {
-        "internalType": "bytes32",
-        "name": "",
-        "type": "bytes32"
-      }
-    ],
-    "stateMutability": "view",
+    "name": "settleWithPrices",
+    "outputs": [],
+    "stateMutability": "nonpayable",
     "type": "function"
   },
   {

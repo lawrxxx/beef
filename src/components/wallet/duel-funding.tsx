@@ -1,5 +1,6 @@
 "use client";
 
+import { deadlineLine } from "@/lib/expiration";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import type { Hex } from "viem";
@@ -84,7 +85,9 @@ function Inner({ d }: { d: Duel }) {
     chain === 0 ? (isCreator && d.status === "pending" && d.escrowState === "unfunded" ? "create" : null)
       : chain === 1 && windowOver ? (state?.mine ? "refund" : null)
         : chain === 1 && canJoin && d.status === "pending" ? "accept"
-          : chain === 2 && d.status === "completed" && d.settlement && d.settlement.status !== "needs_verification" ? "settle" : null;
+          : chain === 2 && d.status === "completed" && d.settlement && d.settlement.status !== "needs_verification" && escrow !== ESCROW_ADDRESS ? "settle" : null;
+  // escrow v3 pays out through beef's settlement relay, no tap needed
+  const relayPays = chain === 2 && d.status === "completed" && escrow === ESCROW_ADDRESS;
   const moves = action === "create" || action === "accept";
   const stakeU = stakeUnits(d.stake);
   const stake = fmtStake(d.stake);
@@ -148,6 +151,7 @@ function Inner({ d }: { d: Duel }) {
         <p className="mt-2 text-xs text-muted">waiting for the creator to lock their stake. you can accept once they have.</p>
       ) : null}
 
+      {relayPays && <p className="mt-2 text-xs text-muted">the result is final. beef's settlement relay is sending the payout on base sepolia; it shows here once confirmed.</p>}
       {phase === "done" && <p className="mt-2 flex items-center gap-1.5 text-sm text-gain"><CheckCircle2 size={15} /> confirmed on base sepolia.</p>}
       {phase === "error" && msg && <p className="mt-2 flex items-start gap-1.5 text-sm text-loss"><AlertTriangle size={15} className="mt-0.5 shrink-0" />{msg}</p>}
       {tx && <a className="mt-2 block text-xs text-brand-dark underline" href={txUrl(tx)} target="_blank" rel="noreferrer">view transaction on the base sepolia explorer</a>}
@@ -165,7 +169,7 @@ function Inner({ d }: { d: Duel }) {
             ["your stock", myTicker ?? "—"],
             ["your stake", `${stake} test usdc`],
             ["prize pool", `${pot} test usdc`],
-            ["deadline", marketTime(d.deadline)],
+            ["deadline", deadlineLine(d)],
             ["network", `${NETWORK_NAME} (testnet)`],
             ["token", "usdc by circle (test)"],
             ["held by", `beef escrow ${shortAddress(escrow ?? ESCROW_ADDRESS)}`],

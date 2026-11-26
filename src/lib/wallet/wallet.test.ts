@@ -4,10 +4,11 @@ import {
 } from "viem";
 import { CHAIN_ID, ENTRYPOINTS, USDC_ADDRESS, assertBaseSepolia } from "@/lib/chain/config";
 import {
-  SMART_WALLET_ABI, buildJoinCalls, buildCreateDuelCalls, OPEN_SLOT, callsHash, decodeSmartAccountCallData, duelIdToBytes32, usdcUnits, type Call,
+  SMART_WALLET_ABI, LEGACY_SETTLE_ABI, buildJoinCalls, buildCreateDuelCalls, OPEN_SLOT, callsHash, decodeSmartAccountCallData, duelIdToBytes32, usdcUnits, type Call,
 } from "./calls";
 import { checkCalls, checkLimits, defaultPolicy } from "./policy";
 import { settlementAttestation } from "@/lib/chainlink/attestation";
+import { escrowResultFor } from "@/lib/server/relay";
 import type { Settlement } from "@/lib/types";
 import { BEEF_ESCROW_ABI } from "./escrow-abi";
 import { MemoryWalletRepo } from "@/lib/server/wallet-repo";
@@ -229,9 +230,16 @@ describe("payout intents", () => {
     expect(r.intent.amountUnits).toBe("0");
     expect(checkCalls(r.intent.calls.map((c) => ({ to: getAddress(c.to), value: BigInt(c.value), data: c.data as Hex })), policy).ok).toBe(true);
     // the settle call carries exactly the attestation hash over the chainlink evidence
-    const call = decodeFunctionData({ abi: BEEF_ESCROW_ABI, data: r.intent.calls[0].data as Hex });
+    const call = decodeFunctionData({ abi: LEGACY_SETTLE_ABI, data: r.intent.calls[0].data as Hex });
     const want = settlementAttestation({ duelKey: duelIdToBytes32(DUEL), settlement: settledPayload(), participants: [{ userId: "alice", ticker: "NVDA", wallet: ALICE_SA }, { userId: "bob", ticker: "AMD", wallet: BOB_SA }], winnerWallets: [ALICE_SA] }).hash;
     expect((call.args as any)[2]).toBe(want);
+  });
+  it("relay result: escrow participant order, exact prices, observation times and the agreed window", () => {
+    const s = settledPayload();
+    const r = escrowResultFor(s, [{ wallet: BOB_SA, ticker: "AMD" }, { wallet: ALICE_SA, ticker: "NVDA" }], keccak256("0x01"));
+    expect(r.startPrices).toEqual([250_000000000000000000n, 180_000000000000000000n]);
+    expect(r.endTimes).toEqual([1764881999n, 1764881999n]);
+    expect([r.startAt, r.endAt]).toEqual([BigInt(s.window!.startTimestamp), BigInt(s.window!.endTimestamp)]);
   });
   it("the attestation changes if any bound value changes", () => {
     const parts = [{ userId: "alice", ticker: "NVDA", wallet: ALICE_SA }, { userId: "bob", ticker: "AMD", wallet: BOB_SA }];

@@ -21,6 +21,12 @@ export const FEED_DECIMALS = 8;
 /** feeds publish at least every 24h while the market is open; allow an hour of slack */
 export const FEED_HEARTBEAT_S = 24 * 3600;
 export const FEED_MAX_AGE_S = FEED_HEARTBEAT_S + 3600;
+/**
+ * resolution: the first feed round at or after the agreed time counts, if it arrives within this
+ * delay (default 8h: the whole regular session plus margin). feeds publish on a 0.5% move or the
+ * 24h heartbeat, so a calm stock can take a while; past the delay, settlement pauses.
+ */
+export const RESOLUTION_MAX_DELAY_S = Number(process.env.CHAINLINK_RESOLUTION_MAX_DELAY_S ?? 8 * 3600);
 
 export const CHAINLINK_FEEDS: Record<SupportedTicker, { feed: Address; token: Address; symbol: string }> = {
   NVDA: { feed: getAddress("0x04689a41629776563E6822F76f2e57D148d28513"), token: getAddress("0xb20000000000000000000078ee7ce2fE4908108C"), symbol: "NVDAc" },
@@ -40,16 +46,33 @@ export const AGGREGATOR_ABI = parseAbi([
 ]);
 
 export const FEEDS_METHODOLOGY = {
-  id: "chainlink_data_feeds_total_return_v1",
+  id: "chainlink_data_feeds_open_v2",
   summary:
-    "starting and ending prices are the values of each stock's chainlink data feed on base mainnet (coinbase tokenized stocks, total-return, 8 decimals) " +
-    "in effect at the official 4:00pm et close (1:00pm on early-close days) of the lock and end sessions: the latest feed round updated at or before the close. " +
-    "both stocks use the same two timestamps. a price counts only if the feed's description and decimals match, the value is positive and the round was updated within 25 hours of the close " +
-    "(feeds publish on a 0.5% move or a 24-hour heartbeat). otherwise settlement pauses for verification. feeds are total-return, so splits and dividends are already reflected. " +
+    "starting prices are taken at the first us market open (9:30am et) after both players accept, and ending prices at the deadline. " +
+    "for each stock, beef uses the first round of its chainlink data feed on base mainnet (coinbase tokenized stocks, total-return, 8 decimals) updated at or after that time, " +
+    "provided it arrives within the maximum delay (default 8 hours). both stocks use the same agreed times and the same rule. " +
+    "these are chainlink feed observations, not the exchange's official opening auction prices. " +
+    "a price counts only if the feed's description and decimals match and the value is positive; a missing, late or invalid observation pauses settlement for verification. " +
     "return = (end − start) / start × 100, compared at 0.0001 percentage points.",
 } as const;
 
 type Round = { roundId: bigint; answer: bigint; updatedAt: bigint };
+
+/** one feed observation at an agreed time */
+export interface Observation {
+  ticker: string;
+  /** the agreed time (iso utc) */
+  at: string;
+  status: "ok" | "pending" | "failed";
+  price: PricePoint | null;
+  /** raw feed answer and its decimals */
+  answer?: string;
+  decimals?: number;
+  /** base mainnet block the read was made at (the round's own block isn't exposed by the aggregator) */
+  readBlock?: string | null;
+  verification: Verification | null;
+  problems: string[];
+}
 
 /** user-facing reason for a failed read: short, no rpc urls or request bodies (full error goes to the server log) */
 function readError(e: unknown): string {
@@ -58,7 +81,7 @@ function readError(e: unknown): string {
   if (/describes itself|decimals, expected/.test(m)) return m;
   return "couldn't reach chainlink's feed on base right now";
 }
-export type FeedClient = Pick<PublicClient, "readContract" | "multicall">;
+export type FeedClient = Pick<PublicClient, "readContract" | "multicall"> & Partial<Pick<PublicClient, "getBlockNumber">>;
 
 /** 8-decimal feed answer → 18-decimal price used everywhere else */
 const toE18 = (answer: bigint) => answer * 10n ** 10n;
@@ -123,6 +146,64 @@ export class ChainlinkFeedPrices {
       agg -= BigInt(ids.length);
     }
     return null; // older than this phase or the search window: never guess
+  }
+
+  /**
+   * first round updated at or after `atS` and no later than `atS + maxDelayS`.
+   * "pending": none yet but the window is still open. "none": the window closed without one.
+   */
+  async roundAtOrAfter(feed: Address, atS: number, maxDelayS: number, nowS: number): Promise<{ status: "ok"; round: Round } | { status: "pending" | "none" }> {
+    const before = await this.roundAtOrBefore(feed, atS);
+    const latest = await this.latest(feed);
+    const deadlineS = atS + maxDelayS;
+    // walk forward from the round in effect at atS (or from the start of history we could see)
+    if (before && before.updatedAt === BigInt(atS)) return { status: "ok", round: before };
+    if (latest.updatedAt < BigInt(atS)) return nowS < deadlineS ? { status: "pending" } : { status: "none" };
+    const phase = latest.roundId >> 64n;
+    const startAgg = before ? (before.roundId & ((1n << 64n) - 1n)) + 1n : 1n;
+    const endAgg = latest.roundId & ((1n << 64n) - 1n);
+    for (let agg = startAgg; agg <= endAgg; agg += 50n) {
+      const ids: bigint[] = [];
+      for (let i = 0n; i < 50n && agg + i <= endAgg; i++) ids.push((phase << 64n) | (agg + i));
+      const res = await this.deps.client.multicall({ contracts: ids.map((id) => ({ address: feed, abi: AGGREGATOR_ABI, functionName: "getRoundData" as const, args: [id] as const })), allowFailure: true });
+      for (const x of res) {
+        if (x.status !== "success") continue;
+        const [roundId, answer, , updatedAt] = x.result as readonly [bigint, bigint, bigint, bigint, bigint];
+        if (updatedAt >= BigInt(atS)) return updatedAt <= BigInt(deadlineS) ? { status: "ok", round: { roundId, answer, updatedAt } } : { status: "none" };
+      }
+    }
+    return nowS < deadlineS ? { status: "pending" } : { status: "none" };
+  }
+
+  /**
+   * the observation for one stock at an agreed time: the first valid feed round at or after it,
+   * within the max delay. "pending" means wait (the window is still open), never a guess.
+   */
+  async observe(ticker: string, at: Date, maxDelayS = RESOLUTION_MAX_DELAY_S): Promise<Observation> {
+    const atS = Math.floor(at.getTime() / 1000);
+    const nowS = Math.floor(this.now().getTime() / 1000);
+    const base = { ticker, at: at.toISOString(), price: null, verification: null, problems: [] as string[] };
+    if (!isSupportedTicker(ticker)) return { ...base, status: "failed", problems: [`${ticker}: no chainlink feed configured`] };
+    const t = ticker.toUpperCase() as SupportedTicker;
+    if (atS > nowS) return { ...base, status: "pending", problems: [`${t}: ${at.toISOString()} hasn't happened yet`] };
+    let feed: Address;
+    try { feed = await this.feedFor(t); } catch (e) { return { ...base, status: "failed", problems: [`${t}: ${readError(e)}`] }; }
+    let r: Awaited<ReturnType<ChainlinkFeedPrices["roundAtOrAfter"]>>;
+    let readBlock: bigint | null = null;
+    try {
+      readBlock = await this.deps.client.getBlockNumber?.().catch(() => null) ?? null;
+      r = await this.roundAtOrAfter(feed, atS, maxDelayS, nowS);
+    } catch (e) { return { ...base, status: "failed", problems: [`${t}: couldn't read feed history (${readError(e)})`] }; }
+    if (r.status === "pending") return { ...base, status: "pending", problems: [`${t}: waiting for the first chainlink update after ${at.toISOString()}`] };
+    if (r.status === "none") return { ...base, status: "failed", problems: [`${t}: no chainlink feed update within ${Math.round(maxDelayS / 3600)}h after ${at.toISOString()} (stale feed, halt or closure)`] };
+    const round = (r as { status: "ok"; round: Round }).round;
+    if (round.answer <= 0n) return { ...base, status: "failed", problems: [`${t}: feed value isn't positive`] };
+    const price: PricePoint = { streamId: feed, mid: toE18(round.answer), observationsTimestamp: Number(round.updatedAt), marketStatus: null, reportHash: roundRef(feed, round), roundId: round.roundId.toString() };
+    const verification: Verification = {
+      status: "onchain", method: "chainlink_data_feed_read", verifier: feed, chainId: FEEDS_CHAIN_ID, configDigest: null, checkedAt: this.now().toISOString(),
+      detail: `read from chainlink's aggregator proxy on base mainnet: round ${round.roundId}, answer ${round.answer} (${FEED_DECIMALS} decimals)${readBlock ? `, read at block ${readBlock}` : ""}`,
+    };
+    return { ...base, status: "ok", price, answer: round.answer.toString(), decimals: FEED_DECIMALS, readBlock: readBlock?.toString() ?? null, verification };
   }
 
   async live(ticker: string): Promise<LiveQuote> {

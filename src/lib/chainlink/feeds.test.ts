@@ -1,10 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { createPublicClient, http, type Address } from "viem";
 import { base } from "viem/chains";
-import { CHAINLINK_FEEDS, ChainlinkFeedPrices, FEEDS_METHODOLOGY, calendarSession, type FeedClient } from "./feeds";
+import { CHAINLINK_FEEDS, ChainlinkFeedPrices, calendarSession, type FeedClient } from "./feeds";
 import { SUPPORTED_TICKERS } from "./config";
 import { sessionCloseUtc } from "@/lib/market/calendar";
-import { InMemorySettlementRepository, settleDuel } from "@/lib/settlement/service";
 
 // fake aggregator for isolated unit tests: rounds with made-up values (not market data)
 function fakeFeed(rounds: { answer: bigint; updatedAt: number }[], opts: { description?: (a: Address) => string; decimals?: number } = {}): FeedClient {
@@ -67,20 +66,17 @@ describe("chainlink data feeds (base mainnet)", () => {
     expect(calendarSession(new Date("2026-12-01T13:00:00Z"))).toBe("pre_market");
     expect(calendarSession(new Date("2026-12-01T22:00:00Z"))).toBe("post_market");
   });
-  it("settles a duel on feed prices; total-return feeds don't get split adjustments twice", async () => {
-    const client = fakeFeed([
-      { answer: 100_00000000n, updatedAt: s(CLOSE_TUE, -30) },
-      { answer: 105_00000000n, updatedAt: s(CLOSE_FRI, -30) },
-    ]);
-    const prices = new ChainlinkFeedPrices({ client, now: () => new Date("2026-12-10") });
-    const repo = new InMemorySettlementRepository([{ ticker: "NVDA", session: "2026-12-03", ratioNum: 10, ratioDen: 1 }]);
-    // same fake values for both tickers → identical returns → draw, with no split applied
-    const r = await settleDuel({ id: "f1", status: "active", acceptedAt: "2026-12-01T15:00:00Z", deadline: "2026-12-04T21:00:00Z", participants: [{ userId: "a", ticker: "NVDA" }, { userId: "b", ticker: "AAPL" }] }, prices, repo, new Date("2026-12-05T00:00:00Z"));
-    expect(r.outcome).toBe("settled");
-    if (r.outcome !== "settled") return;
-    expect([r.settlement.status, r.settlement.methodology]).toEqual(["draw", FEEDS_METHODOLOGY.id]);
-    expect(r.settlement.entries.every((e) => e.returnE6 === "5000000")).toBe(true);
-    expect(r.settlement.evidence!.every((e) => e.verification === "onchain" && e.marketStatus === null)).toBe(true);
+  it("observe: first round at or after the agreed time, within the max delay", async () => {
+    const T = CLOSE_TUE;
+    const rounds = [{ answer: 100_00000000n, updatedAt: s(T, -60) }, { answer: 101_00000000n, updatedAt: s(T, 300) }];
+    const ok = await new ChainlinkFeedPrices({ client: fakeFeed(rounds), now: () => new Date("2026-12-10") }).observe("NVDA", T);
+    expect([ok.status, ok.price?.mid, ok.answer, ok.decimals]).toEqual(["ok", 101_000000000000000000n, "10100000000", 8]);
+    const pending = await new ChainlinkFeedPrices({ client: fakeFeed(rounds.slice(0, 1)), now: () => new Date(T.getTime() + 600_000) }).observe("NVDA", T);
+    expect(pending.status).toBe("pending");
+    const late = await new ChainlinkFeedPrices({ client: fakeFeed([rounds[0], { answer: 1n, updatedAt: s(T, 9 * 3600) }]), now: () => new Date("2026-12-10") }).observe("NVDA", T);
+    expect([late.status, late.problems[0]]).toEqual(["failed", expect.stringMatching(/within 8h/)]);
+    const exact = await new ChainlinkFeedPrices({ client: fakeFeed([{ answer: 7_00000000n, updatedAt: s(T, 0) }]), now: () => new Date("2026-12-10") }).observe("NVDA", T);
+    expect(exact.price?.observationsTimestamp).toBe(s(T, 0));
   });
 
   // optional live read of the real feeds on base mainnet (read-only; no transactions)
