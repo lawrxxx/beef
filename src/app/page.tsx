@@ -40,7 +40,7 @@ function StartBeefCard({ signedIn }: { signedIn: boolean }) {
       <p className="cond mt-2 text-[46px] leading-[.84]">call your<br />shot.</p>
       <div className="mt-4 grid grid-cols-3 border-2 border-slab-text/80">
         {ideas.map(([a, b], i) => (
-          <Link key={a + b} href={signedIn ? `/duel/new?mine=${a}&theirs=${b}` : "/auth/sign-in"} className={cx("cond px-2 py-2.5 text-center text-[19px] transition hover:bg-brand hover:text-[rgb(18_17_16)]", i > 0 && "border-l-2 border-slab-text/80")}>
+          <Link key={a + b} href={signedIn ? `/duel/new?mine=${a}&theirs=${b}` : "/auth/sign-in"} className={cx("cond px-2 py-2.5 text-center text-[19px] transition hover:bg-brand hover:text-brand-ink", i > 0 && "border-l-2 border-slab-text/80")}>
             {a}<span className="mx-0.5 text-brand">/</span>{b}
           </Link>
         ))}

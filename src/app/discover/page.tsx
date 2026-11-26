@@ -111,7 +111,7 @@ export default function DiscoverPage() {
                         <p className="cond mt-2 truncate text-[22px] leading-[.9]">{u.displayName}</p>
                         <p className="num mt-1 text-[11px] text-muted">{score} score</p>
                       </Link>
-                      {u.id !== s.session.userId && <Link href={`/duel/new?vs=${u.id}`} className="meta mt-2 inline-block bg-brand px-1.5 py-0.5 font-bold text-[rgb(18_17_16)]">challenge</Link>}
+                      {u.id !== s.session.userId && <Link href={`/duel/new?vs=${u.id}`} className="meta mt-2 inline-block bg-brand px-1.5 py-0.5 font-bold text-brand-ink">challenge</Link>}
                     </div>
                   ))}
                 </div>

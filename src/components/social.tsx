@@ -142,7 +142,7 @@ export function PostCard({ post }: { post: Post }) {
         <header className="flex items-baseline gap-2">
           <p className="min-w-0 truncate text-[15px]"><UserLink user={author} className="font-bold" /> <span className="text-muted">@{author?.username}</span></p>
           {post.kind === "result" && <span className="meta ml-auto shrink-0 bg-ink px-1.5 font-bold text-inverse">final</span>}
-          {post.kind === "opinion" && <span className="meta ml-auto shrink-0 bg-brand px-1.5 font-bold text-[rgb(18_17_16)]">call</span>}
+          {post.kind === "opinion" && <span className="meta ml-auto shrink-0 bg-brand px-1.5 font-bold text-brand-ink">call</span>}
         </header>
         {community && <Link href={`/communities/${community.slug}`} className="meta text-muted hover:underline">{community.emoji} {community.name}</Link>}
 

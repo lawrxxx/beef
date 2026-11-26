@@ -8,6 +8,8 @@ export default {
       // every colour is a css variable (src/app/globals.css), so light and dark share one set of classes
       colors: {
         bg: "rgb(var(--bg) / <alpha-value>)",
+        away: { DEFAULT: "rgb(var(--away) / <alpha-value>)", ink: "rgb(var(--away-ink) / <alpha-value>)" },
+        silver: "rgb(var(--silver) / <alpha-value>)",
         slab: { DEFAULT: "rgb(var(--slab) / <alpha-value>)", 2: "rgb(var(--slab-2) / <alpha-value>)", text: "rgb(var(--slab-text) / <alpha-value>)", muted: "rgb(var(--slab-muted) / <alpha-value>)" },
         sunken: "rgb(var(--sunken) / <alpha-value>)",
         surface: "rgb(var(--surface) / <alpha-value>)",
@@ -24,12 +26,13 @@ export default {
         chainlink: "rgb(var(--chainlink) / <alpha-value>)",
       },
       fontFamily: {
-        // archivo (one family, two widths) for display and interface, jetbrains mono for every number,
-        // newsreader italic only where a person speaks. all self-hosted in src/app/fonts.
+        // big shoulders display (slanted) for display, barlow for interface, barlow condensed for numbers.
+        // jetbrains mono only for addresses and hashes. all self-hosted in src/app/fonts.
         sans: ["var(--font-body)", "ui-sans-serif", "system-ui", "-apple-system", "\"Segoe UI\"", "Roboto", "sans-serif"],
-        display: ["var(--font-display)", "ui-sans-serif", "system-ui", "sans-serif"],
+        display: ["var(--font-display)", "Impact", "sans-serif"],
         mono: ["var(--font-mono)", "ui-monospace", "SFMono-Regular", "Menlo", "monospace"],
-        serif: ["var(--font-serif)", "Georgia", "serif"],
+        num: ["var(--font-num)", "\"Arial Narrow\"", "sans-serif"],
+        serif: ["var(--font-display)", "sans-serif"],
       },
       // print-like corners: nothing pillowy
       borderRadius: { none: "0px", sm: "0px", DEFAULT: "0px", md: "0px", lg: "0px", xl: "0px", "2xl": "0px", "3xl": "0px", full: "0px" },

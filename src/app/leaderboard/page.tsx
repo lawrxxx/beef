@@ -86,7 +86,7 @@ export default function LeaderboardPage() {
         <>
           {/* the podium: #1 gets the red field, #2 and #3 the ink slabs */}
           <Link href={`/u/${first.u.username}`} className="field -mx-4 grid grid-cols-[auto_1fr_auto] items-end gap-3 px-4 py-4 lg:mx-0">
-            <span className="cond text-[132px] leading-[.72]">1</span>
+            <span className="cond pr-4 text-[132px] leading-[.72]">1</span>
             <div className="min-w-0 pb-1">
               <p className="meta font-bold">top of the board{first.u.id === me && " · you"}</p>
               <div className="mt-1.5 flex items-center gap-2"><Avatar user={first.u} size={30} /><p className="cond truncate text-[34px] leading-[.85]">{first.u.displayName}</p></div>

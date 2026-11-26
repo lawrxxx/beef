@@ -6,9 +6,16 @@ import { AppShell } from "@/components/shell";
 import { THEME_COLORS, THEME_SCRIPT } from "@/lib/theme-script";
 
 // self-hosted (ofl): no runtime font requests, no new dependencies
-const archivo = localFont({ src: "./fonts/archivo.woff2", variable: "--font-display", weight: "100 900", display: "swap", declarations: [{ prop: "font-stretch", value: "62% 125%" }] });
+const display = localFont({ src: "./fonts/big-shoulders-display.woff2", variable: "--font-display", weight: "100 900", display: "swap" });
+const ui = localFont({ variable: "--font-ui", display: "swap", src: [
+  { path: "./fonts/barlow-400.woff2", weight: "400" }, { path: "./fonts/barlow-500.woff2", weight: "500" },
+  { path: "./fonts/barlow-600.woff2", weight: "600" }, { path: "./fonts/barlow-700.woff2", weight: "700" },
+] });
+const num = localFont({ variable: "--font-num", display: "swap", src: [
+  { path: "./fonts/barlow-condensed-600.woff2", weight: "600" }, { path: "./fonts/barlow-condensed-700.woff2", weight: "700" }, { path: "./fonts/barlow-condensed-800.woff2", weight: "800" },
+  { path: "./fonts/barlow-condensed-600-italic.woff2", weight: "600", style: "italic" }, { path: "./fonts/barlow-condensed-700-italic.woff2", weight: "700", style: "italic" }, { path: "./fonts/barlow-condensed-800-italic.woff2", weight: "800", style: "italic" },
+] });
 const mono = localFont({ src: "./fonts/jetbrains-mono.woff2", variable: "--font-mono", weight: "100 800", display: "swap" });
-const serif = localFont({ src: "./fonts/newsreader-italic.woff2", variable: "--font-serif", weight: "400", style: "italic", display: "swap" });
 
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"),
@@ -41,7 +48,7 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     // suppressHydrationWarning: the theme script sets class/style on <html> before react hydrates
-    <html lang="en" suppressHydrationWarning className={`${archivo.variable} ${mono.variable} ${serif.variable}`}>
+    <html lang="en" suppressHydrationWarning className={`${display.variable} ${ui.variable} ${num.variable} ${mono.variable}`}>
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
       </head>
