@@ -72,6 +72,20 @@ const quoteOf = (ticker: string, p: V11Price, streamSession: StreamSession, stat
   observationsTimestamp: p.observationsTimestamp, lastSeenAt: new Date(Number(p.lastSeenTimestampNs / 1_000_000n)).toISOString(), reason,
 });
 
+/** what settlement needs from one price observation, whichever chainlink product it came from */
+export interface PricePoint {
+  /** data streams stream id, or the data feed's proxy address */
+  streamId: Hex;
+  /** 18-decimal price */
+  mid: bigint;
+  observationsTimestamp: number;
+  /** data streams marketStatus; null for data feeds, which don't publish one */
+  marketStatus: number | null;
+  /** keccak of the signed report (streams) or of the feed round (feeds) */
+  reportHash: Hex;
+  roundId?: string;
+}
+
 export interface ReferencePrice {
   ok: boolean;
   ticker: string;
@@ -79,12 +93,14 @@ export interface ReferencePrice {
   /** unix seconds the report must be observed at */
   referenceTimestamp: number;
   streamId: Hex | null;
-  price: V11Price | null;
+  price: PricePoint | null;
   verification: Verification | null;
   problems: string[];
 }
 
 export class ChainlinkPrices {
+  readonly totalReturn = false;
+  readonly methodology = METHODOLOGY;
   constructor(private deps: { api: StreamsApi; streams: StreamsFor; verify: Verify; save?: SaveReport; now?: () => Date }) {}
   private now() { return this.deps.now?.() ?? new Date(); }
 

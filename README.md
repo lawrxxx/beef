@@ -4,7 +4,7 @@
 
 beef is a mobile-first social stock competition app. friends challenge each other over which stock will perform better, post predictions, build rivalries and climb a leaderboard. it's an installable pwa (iphone + android), built with next.js, supabase and coinbase developer platform embedded wallets on **base sepolia**.
 
-> **stakes are real base sepolia test usdc, held by an escrow contract. test usdc has no monetary value.** stock prices come from chainlink data streams. there's no mainnet anywhere in the app, and real money stays off.
+> **stakes are real base sepolia test usdc, held by an escrow contract. test usdc has no monetary value.** stock prices come from chainlink (data feeds on base mainnet by default, read-only). there's no mainnet anywhere in the app, and real money stays off.
 
 there is **no demo mode** and no seeded people. every user, post, follow and duel comes from a real registered account, and every balance and transaction is read from base sepolia. without supabase configured, the app shows a setup screen instead of fake content.
 
@@ -94,9 +94,38 @@ copy `.env.example` → `.env.local`.
 | data loading | the client loads the latest few hundred rows of each table; it needs pagination for real traffic |
 | rate limiting | in-memory per server instance |
 
-## stock prices: chainlink data streams
+## stock prices: chainlink
 
-beef's only price source is **chainlink data streams, 24/5 us equities** (rwa advanced v11 schema), via the official sdk `@chainlink/data-streams-sdk@2.0.0`. the simulated provider and the polygon / finnhub / alpha vantage adapters are gone. supported tickers: NVDA, AAPL, TSLA, MSFT, AMZN, GOOGL, META. without data streams credentials the app shows "price unavailable" and nothing locks or settles. nothing is estimated.
+beef gets stock prices only from chainlink, from one of two sources picked by `CHAINLINK_PRICE_SOURCE`:
+
+### data feeds (default, free)
+chainlink data feeds for **coinbase tokenized stocks on base mainnet (8453)**, per [base's docs](https://docs.base.org/build-on-base/integrate-defi/list-tokenized-stocks). beef only **reads** them (`latestRoundData` / `getRoundData`). there's no api key, it costs nothing, and beef never sends a mainnet transaction. escrow and stakes stay on base sepolia.
+
+| ticker | chainlink feed (base mainnet) | token |
+|---|---|---|
+| NVDA | `0x04689a41629776563E6822F76f2e57D148d28513` | NVDAc |
+| AAPL | `0x787f13dEa48Db0897CbCDD985de77809D837F988` | AAPLc |
+| TSLA | `0xFaf869185383a24F8cb00e27BdA6b63B9905DCb4` | TSLAc |
+| MSFT | `0xeB10A6c9aa7E537aEd766C08c35Dae35B321b18c` | MSFTc |
+| AMZN | `0x06A8E4b3aBB3B7543d8396FB2B763d22820cB295` | AMZNc |
+| GOOGL | `0x5bF49E0ffA937CE2FfF033c739aD7C634c4D34F2` | GOOGLc |
+| META | `0x6526aE6797A76123638b863AeE4dD27Ba4E4b27D` | METAc |
+
+- **where the addresses come from:** coinbase's public `GET /v1/tokenized-stocks/nav-feeds` and `/v1/tokenized-stocks`, retrieved 2026-11-26. at runtime each feed must answer `description() = "Coinbase <TICKER>"` and `decimals() = 8`, or it isn't used.
+- **what the feeds are:**
+  - total-return values (price × a multiplier that absorbs dividends and splits)
+  - update on a 0.5% move or a 24-hour heartbeat during market hours
+  - frozen off-hours and during corporate actions
+- **methodology `chainlink_data_feeds_total_return_v1`** (`src/lib/chainlink/feeds.ts`):
+  - start and end price = the latest feed round updated at or before the official close (4pm et, 1pm on early closes) of the lock and deadline sessions, the same timestamps for both stocks
+  - it pauses if no round exists, the value isn't positive, or the round is more than 25 hours old (frozen, halted or stale)
+  - splits aren't adjusted again; a move of 40% or more pauses settlement for a manual check
+  - **precision:** a "close" can differ from the exchange close by up to about 0.5%, because of the feeds' deviation threshold
+- **evidence:** each snapshot stores the feed address, round id, value, update time and a round hash, marked `onchain` (read directly from chainlink's contract; there's no signed report to verify).
+
+### data streams (optional, paid)
+
+the data streams source uses **chainlink data streams, 24/5 us equities** (rwa advanced v11 schema), via the official sdk `@chainlink/data-streams-sdk@2.0.0`. the simulated provider and the polygon / finnhub / alpha vantage adapters are gone. supported tickers: NVDA, AAPL, TSLA, MSFT, AMZN, GOOGL, META. without data streams credentials the app shows "price unavailable" and nothing locks or settles. nothing is estimated.
 
 **what was checked in chainlink's docs (2026-11-26)**
 - each stock has three v11 streams (regular, extended, overnight). the regular stream's `marketStatus` (0 unknown · 1 pre · 2 regular · 3 post · 4 overnight · 5 closed) decides which one to read.

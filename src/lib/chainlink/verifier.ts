@@ -21,14 +21,15 @@ const V11_BLOB = [
   { type: "int192" }, { type: "uint64" }, { type: "int192" }, { type: "int192" }, { type: "int192" }, { type: "int192" }, { type: "int192" }, { type: "uint32" },
 ] as const;
 
-export type VerificationStatus = "verified" | "reverted" | "mismatch" | "unsupported_config" | "error";
+/** "verified": signatures checked by chainlink's verifier proxy. "onchain": read directly from a chainlink data feed contract (no report to verify). */
+export type VerificationStatus = "verified" | "onchain" | "reverted" | "mismatch" | "unsupported_config" | "error";
 
 export interface Verification {
   status: VerificationStatus;
-  /** how it was checked. "chainlink_verifier_proxy_eth_call" = chainlink's contract, read-only call */
-  method: "chainlink_verifier_proxy_eth_call";
+  /** how it was checked: chainlink's verifier proxy (read-only call) or a direct chainlink data feed read */
+  method: "chainlink_verifier_proxy_eth_call" | "chainlink_data_feed_read";
   verifier: Address;
-  chainId: 84532;
+  chainId: 84532 | 8453;
   configDigest: Hex | null;
   checkedAt: string;
   detail: string;

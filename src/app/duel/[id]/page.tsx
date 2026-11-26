@@ -221,10 +221,10 @@ function DuelView({ d }: { d: Duel }) {
             </table>
           </div>
           <div className="space-y-1 border-t bg-black/[.015] px-4 py-3 text-xs text-muted">
-            {d.startSnapshots[0] && <p>start: chainlink regular-hours mid, {sessionLabel(d.startSnapshots[0].session)} · {marketTime(d.startSnapshots[0].timestamp)}</p>}
-            {d.endSnapshots[0] ? <p>end: chainlink regular-hours mid, {sessionLabel(d.endSnapshots[0].session)} · {marketTime(d.endSnapshots[0].timestamp)}</p> : endSession && <p>end: chainlink regular-hours mid one second before the {sessionLabel(endSession)} close · {marketTime(sessionCloseUtc(endSession).toISOString())}</p>}
+            {d.startSnapshots[0] && <p>start: chainlink price at the {sessionLabel(d.startSnapshots[0].session)} close · {marketTime(d.startSnapshots[0].timestamp)}</p>}
+            {d.endSnapshots[0] ? <p>end: chainlink price at the {sessionLabel(d.endSnapshots[0].session)} close · {marketTime(d.endSnapshots[0].timestamp)}</p> : endSession && <p>end: chainlink price at the {sessionLabel(endSession)} close · {marketTime(sessionCloseUtc(endSession).toISOString())}</p>}
             {[...d.startSnapshots, ...d.endSnapshots].filter((x) => x.streamId).map((x) => (
-              <p key={`${x.ticker}${x.kind}`} className="font-mono text-[11px]">{x.ticker} {x.kind}: stream {x.streamId!.slice(0, 10)}…{x.streamId!.slice(-4)} · observed {x.observationsTimestamp ? new Date(x.observationsTimestamp * 1000).toISOString().slice(0, 19).replace("T", " ") + "z" : "—"} · report {x.reportHash?.slice(0, 10)}… · {x.verification?.status === "verified" ? "verified by chainlink's verifier (base sepolia)" : `verification: ${x.verification?.status ?? "none"}`}</p>
+              <p key={`${x.ticker}${x.kind}`} className="font-mono text-[11px]">{x.ticker} {x.kind}: {x.streamId!.length === 42 ? "feed" : "stream"} {x.streamId!.slice(0, 10)}…{x.streamId!.slice(-4)}{x.roundId ? ` · round ${x.roundId}` : ""} · updated {x.observationsTimestamp ? new Date(x.observationsTimestamp * 1000).toISOString().slice(0, 19).replace("T", " ") + "z" : "—"} · report {x.reportHash?.slice(0, 10)}… · {x.verification?.status === "verified" ? "verified by chainlink's verifier (base sepolia)" : x.verification?.status === "onchain" ? <a className="underline" href={`https://basescan.org/address/${x.streamId}#readContract`} target="_blank" rel="noreferrer">chainlink feed on base mainnet</a> : `verification: ${x.verification?.status ?? "none"}`}</p>
             ))}
             {st && <p>settlement: {st.status === "needs_verification" ? "paused for verification" : st.status} · {st.methodology} · calculation {st.calculationVersion}{st.marginE4 && st.status === "settled" ? ` · margin ${(Number(st.marginE4) / 1e4).toFixed(4)} pts` : ""}</p>}
             {st?.issues?.length ? <p className="text-gold">why it's paused: {st.issues.join("; ")}</p> : null}
@@ -246,11 +246,11 @@ function DuelView({ d }: { d: Duel }) {
               ["stocks", d.participants.map((p) => `${p.ticker} (@${usersMap[p.userId]?.username ?? "open"})`).join(" vs ")],
               ["stake", `${fmtStake(d.stake)} test usdc each, held by the beef escrow on base sepolia`],
               ["prize pool", `${pot} test usdc`],
-              ["comparison", "percentage return from chainlink regular-hours mids at the lock and end closes"],
+              ["comparison", "percentage return from chainlink prices at the lock and end closes"],
               ["price lock", d.terms.priceRule],
               ["deadline", marketTime(d.deadline)],
               ["settlement", d.terms.settlementRule],
-              ["price data", "chainlink data streams · 24/5 us equities (rwa advanced v11), verified with chainlink's base sepolia verifier"],
+              ["price data", d.terms.methodology === "chainlink_regular_hours_mid_v1" ? "chainlink data streams · 24/5 us equities, verified with chainlink's base sepolia verifier" : "chainlink data feeds on base mainnet (coinbase tokenized stocks, total-return), read onchain"],
               ["market timezone", "america/new_york (et). stored in utc."],
               ["calculation", d.terms.calculationVersion],
               ["created", `${marketTime(d.createdAt)} by @${usersMap[d.createdBy]?.username}`],

@@ -1,6 +1,6 @@
 import type { AuditLog, PriceSnapshot, Settlement, SettlementEvidence } from "@/lib/types";
 import { nextCloseAfter, resolveEndSession, sessionCloseUtc } from "@/lib/market/calendar";
-import { METHODOLOGY, type ReferencePrice } from "@/lib/chainlink/prices";
+import type { ReferencePrice } from "@/lib/chainlink/prices";
 import { UNEXPLAINED_MOVE_PCT } from "@/lib/chainlink/config";
 import { priceNumber } from "@/lib/chainlink/report";
 import { buildSettlement, compareReturns, returnE6, type EngineInput } from "./engine";
@@ -24,6 +24,9 @@ export interface SettleableDuel {
 /** where reference prices come from (ChainlinkPrices implements it) */
 export interface ReferenceOracle {
   reference(ticker: string, session: string, closeUtc: Date): Promise<ReferencePrice>;
+  /** total-return prices already reflect splits and dividends: recorded corporate actions aren't applied again */
+  readonly totalReturn: boolean;
+  readonly methodology: { id: string };
 }
 
 /** a recorded split / reverse split: shares after = shares before × num / den */
@@ -66,20 +69,20 @@ function snapshotOf(r: ReferencePrice, kind: "start" | "end"): PriceSnapshot {
   return {
     ticker: r.ticker, kind, price: priceNumber(p.mid), priceE18: p.mid.toString(), session: r.session,
     timestamp: new Date(r.referenceTimestamp * 1000).toISOString(), source: SOURCE, simulated: false,
-    streamId: p.streamId, observationsTimestamp: p.observationsTimestamp, marketStatus: p.marketStatus, reportHash: p.reportHash,
+    streamId: p.streamId, observationsTimestamp: p.observationsTimestamp, marketStatus: p.marketStatus ?? undefined, reportHash: p.reportHash, roundId: p.roundId,
     verification: r.verification ? { status: r.verification.status, method: r.verification.method, verifier: r.verification.verifier, configDigest: r.verification.configDigest, checkedAt: r.verification.checkedAt } : undefined,
   };
 }
 
 const evidenceOf = (s: PriceSnapshot): SettlementEvidence => ({
-  ticker: s.ticker, kind: s.kind, streamId: s.streamId!, observationsTimestamp: s.observationsTimestamp!, marketStatus: s.marketStatus!,
-  midE18: s.priceE18!, reportHash: s.reportHash!, verification: s.verification?.status ?? "none",
+  ticker: s.ticker, kind: s.kind, streamId: s.streamId!, observationsTimestamp: s.observationsTimestamp!, marketStatus: s.marketStatus ?? null,
+  midE18: s.priceE18!, reportHash: s.reportHash!, roundId: s.roundId, verification: s.verification?.status ?? "none",
 });
 
 /** a stored start snapshot is usable only if it came from a verified chainlink report for the lock session */
 function validStoredStart(s: PriceSnapshot | undefined, lockSession: string): s is PriceSnapshot {
   return !!s && s.source === SOURCE && s.session === lockSession && !!s.priceE18 && BigInt(s.priceE18) > 0n
-    && !!s.streamId && !!s.reportHash && s.verification?.status === "verified";
+    && !!s.streamId && !!s.reportHash && (s.verification?.status === "verified" || s.verification?.status === "onchain");
 }
 
 export interface LockResult { ok: boolean; lockSession: string; lockAt: string; snapshots: PriceSnapshot[]; issues: string[] }
@@ -124,7 +127,7 @@ export async function settleDuel(duel: SettleableDuel, oracle: ReferenceOracle, 
   const window = { startSession: lockSession, endSession, startTimestamp: Math.floor(startClose.getTime() / 1000) - 1, endTimestamp: Math.floor(endClose.getTime() / 1000) - 1 };
   if (now.getTime() < endClose.getTime()) return { outcome: "not_due", dueAt: endClose.toISOString() };
 
-  await repo.appendAudit({ duelId: duel.id, at: now.toISOString(), action: "settle.start", detail: `${METHODOLOGY.id}: ${lockSession} ${window.startTimestamp} → ${endSession} ${window.endTimestamp}` });
+  await repo.appendAudit({ duelId: duel.id, at: now.toISOString(), action: "settle.start", detail: `${oracle.methodology.id}: ${lockSession} ${window.startTimestamp} → ${endSession} ${window.endTimestamp}` });
 
   const issues: string[] = [];
   const startSnapshots: PriceSnapshot[] = [];
@@ -146,7 +149,7 @@ export async function settleDuel(duel: SettleableDuel, oracle: ReferenceOracle, 
     if (start.streamId !== end.streamId) { issues.push(`${p.ticker}: start and end prices came from different streams`); continue; }
 
     // splits: express the starting price on the ending share basis, exactly
-    const actions = await repo.corporateActions(p.ticker, lockSession, endSession);
+    const actions = oracle.totalReturn ? [] : await repo.corporateActions(p.ticker, lockSession, endSession);
     let num = 1n, den = 1n;
     for (const a of actions) { num *= BigInt(a.ratioNum); den *= BigInt(a.ratioDen); }
     const startE18 = BigInt(start.priceE18!);
@@ -158,8 +161,10 @@ export async function settleDuel(duel: SettleableDuel, oracle: ReferenceOracle, 
     // a huge move with no recorded corporate action may be an unrecorded split: don't guess
     const r6 = returnE6(adjusted, BigInt(end.priceE18!));
     const absPct = (r6 < 0n ? -r6 : r6) / 1_000_000n;
-    if (absPct >= BigInt(UNEXPLAINED_MOVE_PCT) && actions.length === 0) {
-      issues.push(`${p.ticker}: moved ${Number(r6) / 1e6}% with no recorded corporate action (possible split); needs a manual check`);
+    if (absPct >= BigInt(UNEXPLAINED_MOVE_PCT) && (oracle.totalReturn || actions.length === 0)) {
+      issues.push(oracle.totalReturn
+        ? `${p.ticker}: moved ${Number(r6) / 1e6}%, an unusually large move; needs a manual check before paying out`
+        : `${p.ticker}: moved ${Number(r6) / 1e6}% with no recorded corporate action (possible split); needs a manual check`);
       continue;
     }
     startSnapshots.push(start);
@@ -167,7 +172,7 @@ export async function settleDuel(duel: SettleableDuel, oracle: ReferenceOracle, 
     inputs.push({ userId: p.userId, ticker: p.ticker, startE18: adjusted, endE18: BigInt(end.priceE18!) });
   }
 
-  const meta = { source: SOURCE, simulated: false, methodology: METHODOLOGY.id, startSession: lockSession, endSession, settledAt: now.toISOString(), window };
+  const meta = { source: SOURCE, simulated: false, methodology: oracle.methodology.id, startSession: lockSession, endSession, settledAt: now.toISOString(), window };
 
   if (issues.length) {
     const pending: Settlement = {

@@ -47,6 +47,7 @@ export interface PriceSnapshot {
   observationsTimestamp?: number;
   marketStatus?: number;
   reportHash?: string;
+  roundId?: string;
   verification?: { status: string; method: string; verifier: string; configDigest: string | null; checkedAt: string };
 }
 
@@ -69,8 +70,10 @@ export interface SettlementEvidence {
   kind: "start" | "end";
   streamId: string;
   observationsTimestamp: number;
-  marketStatus: number;
+  /** null for data feeds, which publish no market status */
+  marketStatus: number | null;
   midE18: string;
+  roundId?: string;
   reportHash: string;
   verification: string;
 }

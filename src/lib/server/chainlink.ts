@@ -1,6 +1,8 @@
 import "server-only";
 import { createClient, type DataStreamsClient } from "@chainlink/data-streams-sdk";
 import { createPublicClient, http } from "viem";
+import { base } from "viem/chains";
+import { ChainlinkFeedPrices } from "@/lib/chainlink/feeds";
 import { CHAIN } from "@/lib/chain/config";
 import { chainlinkServerConfig, type SupportedTicker } from "@/lib/chainlink/config";
 import { discoverStreams, type DiscoveredStream, type TickerDiscovery } from "@/lib/chainlink/discovery";
@@ -57,8 +59,20 @@ async function saveReport(r: StoredReport) {
   if (error) throw new Error(`couldn't store the chainlink report: ${error.message}`);
 }
 
-/** chainlink prices, or null when data streams credentials or the database aren't configured */
-export function chainlinkPrices(): ChainlinkPrices | null {
+/**
+ * which chainlink product prices come from. "data_feeds" (default): chainlink data feeds for coinbase
+ * tokenized stocks on base mainnet, free and read-only. "data_streams": the paid data streams api,
+ * verified with chainlink's base sepolia verifier (needs CHAINLINK_DS_* credentials).
+ */
+export const PRICE_SOURCE: "data_feeds" | "data_streams" = process.env.CHAINLINK_PRICE_SOURCE === "data_streams" ? "data_streams" : "data_feeds";
+
+// read-only client for base mainnet. beef never sends a transaction here.
+const baseMainnet = createPublicClient({ chain: base, transport: http(process.env.BASE_MAINNET_RPC_URL || "https://mainnet.base.org") });
+let feedPrices: ChainlinkFeedPrices | null = null;
+
+/** the configured chainlink price source, or null when it can't run */
+export function chainlinkPrices(): ChainlinkPrices | ChainlinkFeedPrices | null {
+  if (PRICE_SOURCE === "data_feeds") return (feedPrices ??= new ChainlinkFeedPrices({ client: baseMainnet }));
   const api = streamsClient();
   if (!api || !getAdminSupabase()) return null;
   return new ChainlinkPrices({ api, streams: streamsFor, verify: (p) => verifyWithChainlink(baseSepolia, p), save: saveReport });
@@ -69,9 +83,9 @@ const liveCache = new Map<string, { at: number; q: LiveQuote }>();
 export async function liveQuotes(tickers: string[]): Promise<LiveQuote[]> {
   const prices = chainlinkPrices();
   return Promise.all(tickers.map(async (t) => {
-    if (!prices) return { ticker: t, source: "chainlink" as const, status: "unavailable" as const, session: "unknown" as const, sessionLabel: "market status unknown", marketStatus: null, streamId: null, streamSession: null, price: null, priceE18: null, bidE18: null, askE18: null, observationsTimestamp: null, lastSeenAt: null, reason: "chainlink data streams isn't configured on this deployment" };
+    if (!prices) return { ticker: t, source: "chainlink" as const, status: "unavailable" as const, session: "unknown" as const, sessionLabel: "market status unknown", marketStatus: null, streamId: null, streamSession: null, price: null, priceE18: null, bidE18: null, askE18: null, observationsTimestamp: null, lastSeenAt: null, reason: "chainlink prices aren't configured on this deployment" };
     const hit = liveCache.get(t);
-    if (hit && Date.now() - hit.at < 10_000) return hit.q;
+    if (hit && Date.now() - hit.at < (PRICE_SOURCE === "data_feeds" ? 30_000 : 10_000)) return hit.q;
     const q = await prices.live(t);
     liveCache.set(t, { at: Date.now(), q });
     return q;

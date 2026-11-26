@@ -1,4 +1,4 @@
-import { encodeAbiParameters, keccak256, type Address, type Hex } from "viem";
+import { encodeAbiParameters, keccak256, pad, type Address, type Hex } from "viem";
 import type { Settlement } from "@/lib/types";
 
 // the settlement attestation: one hash over everything a payout depends on. beef's
@@ -27,7 +27,7 @@ export function settlementAttestation(p: {
   if (!s.window || !s.evidence?.length) throw new AttestationError("this settlement has no chainlink evidence, so it can't be paid out");
   const ev = (ticker: string, kind: "start" | "end") => {
     const e = s.evidence!.find((x) => x.ticker === ticker && x.kind === kind);
-    if (!e || e.verification !== "verified") throw new AttestationError(`${ticker}: no verified ${kind} report`);
+    if (!e || (e.verification !== "verified" && e.verification !== "onchain")) throw new AttestationError(`${ticker}: no verified ${kind} report`);
     return e;
   };
   const entry = (ticker: string) => {
@@ -43,7 +43,7 @@ export function settlementAttestation(p: {
       { type: "uint64" }, { type: "uint64" }, { type: "address[]" }, { type: "bool" }, { type: "string" }, { type: "string" },
     ],
     [
-      ATTESTATION_VERSION, p.duelKey, rows.map((r) => r.wallet), rows.map((r) => r.ticker), rows.map((r) => r.start.streamId as Hex),
+      ATTESTATION_VERSION, p.duelKey, rows.map((r) => r.wallet), rows.map((r) => r.ticker), rows.map((r) => (r.start.streamId.length === 42 ? pad(r.start.streamId as Hex) : r.start.streamId) as Hex) /* stream id, or feed address left-padded */,
       rows.map((r) => BigInt(r.entry.startE18!)), rows.map((r) => BigInt(r.entry.endE18!)),
       rows.map((r) => BigInt(r.start.observationsTimestamp)), rows.map((r) => BigInt(r.end.observationsTimestamp)),
       rows.map((r) => r.start.reportHash as Hex), rows.map((r) => r.end.reportHash as Hex),

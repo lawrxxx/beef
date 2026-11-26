@@ -37,8 +37,8 @@ export default function StockPage() {
         {q ? <QuoteLine q={q} big /> : loading ? <Skeleton className="h-12 w-40" /> : <p className="text-sm text-loss">price unavailable</p>}
         {q?.reason && q.status !== "live" && <p className="mt-1 text-xs text-muted">{q.reason}</p>}
         <p className="mt-2 text-xs text-muted">
-          price: the mid from chainlink data streams' 24/5 {ticker} streams (regular, extended or overnight, chosen by chainlink's market status).
-          {q?.streamId && <> stream <span className="font-mono">{q.streamId.slice(0, 10)}…{q.streamId.slice(-6)}</span>.</>}
+          price: chainlink.{q?.streamId && q.streamId.length === 42 && <> {ticker}'s chainlink data feed on base mainnet (<a className="font-mono underline" href={`https://basescan.org/address/${q.streamId}`} target="_blank" rel="noreferrer">{q.streamId.slice(0, 8)}…{q.streamId.slice(-4)}</a>), total-return, updates on a 0.5% move.</>}
+          {q?.streamId && q.streamId.length !== 42 && <> data streams stream <span className="font-mono">{q.streamId.slice(0, 10)}…{q.streamId.slice(-6)}</span>.</>}
         </p>
         <div className="mt-4 flex gap-2">
           <Link href={`/duel/new?mine=${ticker}`} className="btn-primary btn-sm flex-1"><Swords size={15} /> back {ticker} in a duel</Link>
