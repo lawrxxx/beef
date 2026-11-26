@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prepareIntent } from "@/lib/server/wallet-service";
-import { appUserId, cachedVerifier, errorResponse, getWalletRepo, limited, loadDuelForChain } from "@/lib/server/wallet-deps";
+import { appUserId, cachedVerifier, errorResponse, getWalletRepo, limited, loadDuelForChain, resolveEscrow } from "@/lib/server/wallet-deps";
 import { CDP_NETWORK } from "@/lib/chain/config";
 import { oracleConfigured, signJoin, signSettlement } from "@/lib/server/oracle";
 
@@ -17,7 +17,7 @@ export async function POST(req: Request) {
     const userId = await appUserId();
     const { intent, summary } = await prepareIntent(
       { accessToken: body.data.accessToken, action: body.data.action, duelId: body.data.duelId, appUserId: userId ?? undefined },
-      { verify: cachedVerifier(), repo: getWalletRepo(), loadDuel: loadDuelForChain, sign: oracleConfigured() ? signSettlement : undefined, signJoin: oracleConfigured() ? signJoin : undefined },
+      { verify: cachedVerifier(), repo: getWalletRepo(), loadDuel: loadDuelForChain, sign: oracleConfigured() ? signSettlement : undefined, signJoin: oracleConfigured() ? signJoin : undefined, resolveEscrow },
     );
     return NextResponse.json({ intentId: intent.id, calls: intent.calls, network: CDP_NETWORK, expiresAt: intent.expiresAt, summary });
   } catch (e) { return errorResponse(e); }

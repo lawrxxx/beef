@@ -8,9 +8,9 @@ import dynamic from "next/dynamic";
 import type { Duel, User } from "@/lib/types";
 import { getAsset } from "@/lib/market/assets";
 import { deadlineOptions, nextCloseAfter, sessionCloseUtc } from "@/lib/market/calendar";
-import {
-  MAX_STAKE, STAKE_OPTIONS, createDuel, inviteLink, useBeef,
-} from "@/lib/store/store";
+import { createDuel, inviteLink, useBeef } from "@/lib/store/store";
+import { STAKE_MAX_UNITS, STAKE_MIN_UNITS, STAKE_PRESETS, fmtStake, formatUsdc, parseStakeInput, prizePoolUnits } from "@/lib/stake";
+import type { StakeWalletStatus } from "@/components/wallet/stake-balance";
 import { rivalsOf, useMe } from "@/lib/hooks";
 import { cx, marketTime, usd } from "@/lib/format";
 import { Avatar, EmptyState, SimBadge, useAction } from "@/components/ui";
@@ -19,6 +19,9 @@ import { absoluteUrl, shareLink, toast } from "@/components/share";
 
 // wallet code (viem + cdp) only loads for the funding step
 const FundCard = dynamic(() => import("@/components/wallet/duel-funding").then((m) => m.DuelFunding), { ssr: false });
+const StakeBalance = dynamic(() => import("@/components/wallet/stake-balance").then((m) => m.StakeBalance), {
+  ssr: false, loading: () => <div className="mt-3 rounded-2xl border px-3 py-2.5"><div className="skeleton h-5 w-48" /></div>,
+});
 
 const STEPS = [
   { key: "who", title: "who are you beefing with?" },
@@ -52,7 +55,9 @@ function NewDuelInner() {
   const [activeSlot, setActiveSlot] = useState(preMine ? (preTheirs ? 0 : 1) : 0);
   const [mine, setMine] = useState<string | null>(preMine);
   const [assign, setAssign] = useState<Record<string, string>>({}); // group: friend -> ticker
-  const [stake, setStake] = useState(10);
+  const [stakeChoice, setStakeChoice] = useState<string>("10"); // a preset, or "custom"
+  const [customStake, setCustomStake] = useState("");
+  const [wallet, setWallet] = useState<StakeWalletStatus>({ ready: false, reason: "checking your wallet…" });
   const [deadlineId, setDeadlineId] = useState("week");
   const [visibility, setVisibility] = useState<Duel["visibility"]>("public");
   const [title, setTitle] = useState("");
@@ -89,14 +94,18 @@ function NewDuelInner() {
     ? opponents.map((id, i) => ({ userId: id, ticker: assign[id] && theirStocks.includes(assign[id]) ? assign[id] : theirStocks[i] }))
     : [];
   const participants = mode === "open" ? 2 : opponents.length + 1;
-  const pot = stake * participants;
+  // amounts stay in bigint base units; strings are for display only
+  const stakeCheck = parseStakeInput(stakeChoice === "custom" ? customStake : stakeChoice);
+  const stakeU = stakeCheck.ok ? stakeCheck.units : null;
+  const stakeLabel = stakeCheck.ok ? stakeCheck.value : "—";
+  const potLabel = stakeU != null ? formatUsdc(prizePoolUnits(stakeU, participants)) : "—";
   const userById = (id: string) => s.users.find((u) => u.id === id);
 
   const problems: (string | null)[] = [
     mode === "open" ? null : mode === "group" ? (opponents.length < 2 ? "pick at least two friends for a group beef" : null) : opponents.length !== 1 ? "pick someone to challenge, or make it an open challenge" : null,
     picked.some((t) => !t) ? `pick ${slots} different stocks` : new Set(picked).size !== picked.length ? "each side needs a different stock" : null,
     !mine || !picked.includes(mine) ? "pick the stock you're backing" : mode === "group" && new Set(groupAssign.map((g) => g.ticker)).size !== groupAssign.length ? "each friend needs a different stock" : null,
-    !STAKE_OPTIONS.includes(stake) ? "pick a stake" : null,
+    !stakeCheck.ok ? stakeCheck.error : !wallet.ready ? wallet.reason : null,
     !deadline ? "pick a deadline" : null,
     !agree ? "agree to the terms to send it" : null,
   ];
@@ -123,7 +132,7 @@ function NewDuelInner() {
     setSubmitting(true);
     const theirTicker = mode === "group" ? groupAssign[0].ticker : theirStocks[0];
     const d = await run(() => createDuel({
-      myTicker: mine!, opponentTicker: theirTicker, opponentId: mode === "open" ? null : opponents[0], stake,
+      myTicker: mine!, opponentTicker: theirTicker, opponentId: mode === "open" ? null : opponents[0], stake: Number(stakeLabel), // "35.50" → 35.5, stored as numeric(10,2)
       deadline: deadline.deadline, deadlineLabel: deadline.label, visibility, title: title || undefined,
       extra: mode === "group" ? groupAssign.slice(1) : undefined,
     }), "challenge saved");
@@ -142,7 +151,7 @@ function NewDuelInner() {
         <div className="text-center">
           <div className={cx("mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full", funded ? "bg-gain-soft text-gain" : "bg-gold-soft text-gold")}>{funded ? <Check size={28} /> : <Lock size={26} />}</div>
           <h1 className="font-display text-2xl font-bold">{funded ? "challenge sent" : "one more step: lock your stake"}</h1>
-          <p className="mt-1 text-[15px] text-muted">{funded ? (created.open ? "anyone can take the other side." : "your opponent can accept now. it goes live at the first market close after everyone's in.") : `your ${stake} test usdc goes into the beef escrow on base sepolia. nobody can accept until it's locked.`}</p>
+          <p className="mt-1 text-[15px] text-muted">{funded ? (created.open ? "anyone can take the other side." : "your opponent can accept now. it goes live at the first market close after everyone's in.") : `your ${fmtStake(created.stake)} test usdc goes into the beef escrow on base sepolia. nobody can accept until it's locked.`}</p>
         </div>
         <FundCard d={live} />
         {funded && (
@@ -151,7 +160,7 @@ function NewDuelInner() {
             <p className="mt-1 truncate font-mono text-[12px] text-muted">{link}</p>
             <div className="mt-3 grid grid-cols-2 gap-2">
               <button className="btn-outline btn-sm" onClick={async () => { await navigator.clipboard.writeText(link).catch(() => {}); toast("success", "link copied"); }}><Copy size={15} /> copy link</button>
-              <button className="btn-dark btn-sm" onClick={() => shareLink(link, `${me.displayName} challenged you on beef: ${created.participants.map((p) => p.ticker).join(" vs ")}, ${stake} test usdc each.`)}><Share2 size={15} /> share</button>
+              <button className="btn-dark btn-sm" onClick={() => shareLink(link, `${me.displayName} challenged you on beef: ${created.participants.map((p) => p.ticker).join(" vs ")}, ${fmtStake(created.stake)} test usdc each.`)}><Share2 size={15} /> share</button>
             </div>
           </div>
         )}
@@ -182,7 +191,7 @@ function NewDuelInner() {
           <span className="text-muted">{mode === "open" ? "open challenge" : opponents.map((id) => `@${userById(id)?.username}`).join(", ")}</span>
           {picked.some(Boolean) && <span className="font-bold">· {picked.map((t) => t ?? "?").join(" vs ")}</span>}
           {step > 2 && mine && <span className="text-muted">· you: <b className="text-ink">{mine}</b></span>}
-          {step > 3 && <span className="text-muted">· {stake} test usdc each</span>}
+          {step > 3 && <span className="text-muted">· {stakeLabel} test usdc each</span>}
         </div>
       )}
 
@@ -283,18 +292,35 @@ function NewDuelInner() {
 
       {step === 3 && (
         <div>
-          <div className="grid grid-cols-5 gap-2">
-            {STAKE_OPTIONS.map((v) => (
-              <button key={v} onClick={() => setStake(v)} aria-pressed={stake === v}
-                className={cx("rounded-xl border-2 py-3 font-display text-lg font-bold transition disabled:opacity-30", stake === v ? "border-ink bg-ink text-white" : "border-line bg-surface")}>{v}</button>
+          <div className="grid grid-cols-6 gap-1.5">
+            {STAKE_PRESETS.map((v) => (
+              <button key={v} onClick={() => setStakeChoice(v)} aria-pressed={stakeChoice === v}
+                className={cx("min-w-0 rounded-xl border-2 py-2.5 font-display text-lg font-bold transition", stakeChoice === v ? "border-ink bg-ink text-white" : "border-line bg-surface")}>{v}</button>
             ))}
+            <button onClick={() => setStakeChoice("custom")} aria-pressed={stakeChoice === "custom"}
+              className={cx("min-w-0 rounded-xl border-2 py-2.5 font-display text-[13px] font-bold transition", stakeChoice === "custom" ? "border-ink bg-ink text-white" : "border-line bg-surface")}>custom</button>
           </div>
-          <div className="mt-4 grid grid-cols-3 gap-2 text-center">
-            <div className="card p-3"><p className="text-xs text-muted">your stake</p><p className="num mt-0.5 font-display text-lg font-bold">{stake}</p><p className="text-[10px] text-muted">test usdc</p></div>
-            <div className="card p-3"><p className="text-xs text-muted">{participants > 2 ? `each of ${participants - 1} friends` : "their stake"}</p><p className="num mt-0.5 font-display text-lg font-bold">{stake}</p><p className="text-[10px] text-muted">test usdc</p></div>
-            <div className="card border-ink/20 bg-ink p-3 text-white"><p className="text-xs text-white/70">prize pool</p><p className="num mt-0.5 font-display text-lg font-bold">{pot}</p><p className="text-[10px] text-white/70">test usdc</p></div>
+          {stakeChoice === "custom" && (
+            <div className="mt-2.5">
+              <div className="relative">
+                <input id="custom-stake" aria-label="your stake" className="input num scroll-mb-48 !pr-24 text-lg font-semibold" inputMode="decimal" enterKeyHint="done" autoComplete="off" autoFocus
+                  placeholder="35.50" value={customStake} aria-invalid={!!customStake && !stakeCheck.ok} aria-describedby="custom-stake-hint"
+                  onChange={(e) => setCustomStake(e.target.value.replace(",", ".").replace(/[^\d.]/g, "").slice(0, 12))}
+                  onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }} />
+                <span className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-sm text-muted">test usdc</span>
+              </div>
+              <p id="custom-stake-hint" className={cx("mt-1 text-xs", customStake && !stakeCheck.ok ? "text-loss" : "text-muted")}>
+                {customStake && !stakeCheck.ok ? stakeCheck.error : `${formatUsdc(STAKE_MIN_UNITS)} to ${formatUsdc(STAKE_MAX_UNITS)} test usdc, up to 2 decimals`}
+              </p>
+            </div>
+          )}
+          <StakeBalance stakeUnits={stakeU} onStatus={setWallet} />
+          <div className="mt-2.5 grid grid-cols-3 gap-2 text-center">
+            <div className="card min-w-0 p-2.5"><p className="text-xs text-muted">your stake</p><p className="num mt-0.5 truncate font-display text-lg font-bold">{stakeLabel}</p><p className="text-[10px] text-muted">test usdc</p></div>
+            <div className="card min-w-0 p-2.5"><p className="text-xs text-muted">{participants > 2 ? `each of ${participants - 1} friends` : "their stake"}</p><p className="num mt-0.5 truncate font-display text-lg font-bold">{stakeLabel}</p><p className="text-[10px] text-muted">test usdc</p></div>
+            <div className="card min-w-0 border-ink/20 bg-ink p-2.5 text-white"><p className="text-xs text-white/70">prize pool</p><p className="num mt-0.5 truncate font-display text-lg font-bold">{potLabel}</p><p className="text-[10px] text-white/70">test usdc</p></div>
           </div>
-          <p className="mt-3 text-[13px] text-muted">winner takes the pool; a draw returns everyone's stake. stakes are test usdc on base sepolia (no monetary value), up to {MAX_STAKE} per duel. you'll need this much in your wallet when you lock it.</p>
+          <p className="mt-3 text-[13px] text-muted">everyone puts in the same stake and the winner takes the pool; a draw returns every stake. stakes are test usdc on base sepolia (no monetary value), held by the beef escrow.</p>
         </div>
       )}
 
@@ -323,8 +349,9 @@ function NewDuelInner() {
               ["against", mode === "open" ? "open challenge · first to accept" : opponents.map((id) => `@${userById(id)?.username}`).join(", ")],
               ["you back", mine!],
               [mode === "group" ? "they back" : "they back", mode === "group" ? groupAssign.map((g) => `${g.ticker} (@${userById(g.userId)?.username})`).join(", ") : theirStocks[0]],
-              ["your stake", `${stake} test usdc`],
-              ["prize pool", `${pot} test usdc · winner takes all`],
+              ["your stake", `${stakeLabel} test usdc`],
+              [participants > 2 ? "each friend's stake" : "their stake", `${stakeLabel} test usdc`],
+              ["prize pool", `${potLabel} test usdc · winner takes all`],
               ["deadline", `${deadline.label} · ${marketTime(deadline.deadline)}`],
               ["prices lock", "first official close after everyone's in"],
               ["network", "base sepolia (testnet)"],

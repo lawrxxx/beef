@@ -29,6 +29,15 @@ const rawEscrow = process.env.NEXT_PUBLIC_ESCROW_ADDRESS ?? "";
 /** deployed BeefEscrow on base sepolia, or null until one is deployed and configured */
 export const ESCROW_ADDRESS: `0x${string}` | null = isAddress(rawEscrow) ? getAddress(rawEscrow) : null;
 
+/**
+ * escrows deployed earlier that may still hold stakes for older duels (settle/refund
+ * only). new duels always open on ESCROW_ADDRESS. 0xAe3a… had a fixed 25 usdc cap.
+ */
+export const PREVIOUS_ESCROWS: readonly `0x${string}`[] = [getAddress("0xae3a647029a7a3fedf10f12dc7bbd098a5bf9f88")];
+/** every escrow beef recognises: the current one first */
+export const KNOWN_ESCROWS: readonly `0x${string}`[] = [...(ESCROW_ADDRESS ? [ESCROW_ADDRESS] : []), ...PREVIOUS_ESCROWS.filter((a) => a !== ESCROW_ADDRESS)];
+export const isKnownEscrow = (a: string) => isAddress(a) && KNOWN_ESCROWS.includes(getAddress(a));
+
 /** hard off. there is no code path that moves real money. */
 export const REAL_MONEY_ENABLED = false as const;
 

@@ -58,6 +58,7 @@ copy `.env.example` → `.env.local`.
 | `CDP_API_KEY_ID` / `CDP_API_KEY_SECRET` | for wallets | **server only**. verifies cdp end-user access tokens |
 | `CDP_PAYMASTER_URL` | for gas | **server only**. base sepolia paymaster endpoint; the browser only sees `/api/paymaster` |
 | `NEXT_PUBLIC_ESCROW_ADDRESS` | for stakes | deployed `BeefEscrow`. blank = stakes can't be locked (the app says so) |
+| `NEXT_PUBLIC_STAKE_MIN_USDC` / `NEXT_PUBLIC_STAKE_MAX_USDC` | no | stake limits per participant (default 1 / 1000 test usdc). must match the escrow's immutable `minStake` / `maxStake` and `duels_stake_check`; `/api/wallet/status` → `stakeLimits.match` |
 | `SETTLEMENT_ORACLE_PRIVATE_KEY` | for stakes | **server only**. signs joins and results; its address is the escrow's oracle |
 | `BASE_SEPOLIA_RPC_URL` | no | server rpc (default `https://sepolia.base.org`) |
 | `SPONSOR_PER_USER_DAILY` / `SPONSOR_GLOBAL_DAILY` | no | sponsorship limits (default 10 / 500 operations a day) |
@@ -70,7 +71,7 @@ copy `.env.example` → `.env.local`.
 
 1. create a supabase project (or vercel → storage → supabase). put the url, anon key and service role key in the env.
 2. apply the migrations in order (sql editor, or `npx supabase db push`):
-   `20261125000000_beef_schema.sql`, `20261126000000_social_triggers.sql`, `20261127000000_wallets.sql`, `20261128000000_real_users.sql`. then run `supabase/seed.sql` (stocks and achievements only, no people).
+   `20261125000000_beef_schema.sql`, `20261126000000_social_triggers.sql`, `20261127000000_wallets.sql`, `20261128000000_real_users.sql`, `20261129000000_custom_stakes.sql` (or paste `supabase/setup.sql`, which bundles them all). then run `supabase/seed.sql` (stocks and achievements only, no people).
 3. **authentication → url configuration**: site url = your app url; redirect urls `<url>/onboarding` and `<url>/auth/update-password`.
 4. **authentication → providers → google** (optional): add a google oauth client id and secret, with supabase's callback url as the authorised redirect uri in google cloud. until it's enabled, the google button explains that it's switched off.
 5. storage: the schema creates a public `avatars` bucket where each user can only write their own file.
@@ -79,7 +80,7 @@ copy `.env.example` → `.env.local`.
 - the client loads from postgres (rls decides what each person can see), writes social actions directly, and reloads when realtime reports a change.
 - profiles are created only by the person during onboarding (the old auto-profile trigger is gone, so no generated usernames).
 - money state is **never** written by the browser. `duels.escrow_state` (`unfunded → funded → active → settled/refunded`), `funded_at`, `escrow_tx` and `duel_participants.join_tx` change only through the service-role rpcs `set_escrow_state` and `accept_duel_for`, called after the server verifies the transaction receipt on base sepolia. users can't call `accept_duel` any more; joining a duel *is* the onchain deposit.
-- duels are created `unfunded` (stake 1–25 test usdc, `funding = 'base_sepolia_usdc'`), and nobody can join until the creator's stake is in the escrow.
+- duels are created `unfunded` (stake 1–1000 test usdc in whole cents, `funding = 'base_sepolia_usdc'`), and nobody can join until the creator's stake is in the escrow.
 - terms are frozen once a duel leaves `pending`; snapshots, settlements and audit logs are append-only and service-role only.
 
 ### known limitations
@@ -136,7 +137,7 @@ packages (pinned): `@coinbase/cdp-hooks@0.0.130`, `@coinbase/cdp-core@0.0.130` (
    - the operation matches an unexpired intent for that wallet, hash for hash
    - every call passes the policy:
      - only test usdc and the beef escrow
-     - usdc only `approve(escrow, ≤ $25)`, and only when the same batch then calls the escrow (no dangling allowances)
+     - usdc only `approve(escrow, min stake ≤ amount ≤ max stake)`, and only when the same batch then calls the escrow (no dangling allowances)
      - escrow only `createDuel` / `join` / `refund` / `settle`
      - no eth value
    - per-user and global daily limits aren't exceeded
@@ -172,7 +173,14 @@ packages (pinned): `@coinbase/cdp-hooks@0.0.130`, `@coinbase/cdp-core@0.0.130` (
 - an oracle-signed `settle` bound to the chain id and contract address (no replay), executable once
 - draws refund everyone; tied winners split the pot
 - `refund` after a 2-day funding window
-- max stake $25, max 6 participants
+- stake limits set at deploy (`minStake` / `maxStake`, immutable; beef deploys 1–1000 test usdc), max 6 participants
+- every participant deposits exactly the duel's stake (`transferFrom(…, stake)`), so the pot is stake × participants
+
+**stakes.** the stake step offers 1, 5, 10, 20, 25 or a custom amount (up to 2 decimals). under the options it shows the creator's real base sepolia usdc balance (circle's usdc contract, read through viem), with refresh, a faucet link and copy-address when it's short; continue stays disabled until the wallet is connected and holds enough. all amounts are bigint base units (`src/lib/stake.ts`, viem `parseUnits` / `formatUnits`), never float math. the same limits are enforced in the ui, the store, the intent api, the paymaster policy, the database check and the contract, and the confirm step checks the escrow's `Created` event carries exactly the stake shown.
+
+**escrow versions.** new duels open on `NEXT_PUBLIC_ESCROW_ADDRESS`. earlier escrows stay in `PREVIOUS_ESCROWS` (`src/lib/chain/config.ts`) so duels already funded there can still settle or refund; the app finds a duel's escrow by reading each known escrow onchain.
+  - `0xAe3a647029a7A3Fedf10F12dC7bbd098a5bf9F88`: first deployment, fixed 25 usdc cap (still holds the first test duel)
+  - `0x760cfec066c424deef2bcb54ac2ce287d9ba0eff`: configurable limits, 1–1000 test usdc
 
 ## pwa
 
@@ -217,4 +225,4 @@ e2e/                      two-user browser test
 
 ## responsible design
 
-18+ confirmation at sign-up and onboarding, country capture for future eligibility checks, explicit terms checkbox before creating or accepting any duel, max stake $25, a beef score that ignores stake size, clear "simulated" labels on every price and balance, a full risk disclosure at `/rules#risk`, and rate limits on duel, comment, post and settlement actions.
+18+ confirmation at sign-up and onboarding, country capture for future eligibility checks, explicit terms checkbox before creating or accepting any duel, configurable stake limits (1–1000 test usdc by default), a beef score that ignores stake size, clear "simulated" labels on every price and balance, a full risk disclosure at `/rules#risk`, and rate limits on duel, comment, post and settlement actions.

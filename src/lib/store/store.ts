@@ -1,5 +1,6 @@
 "use client";
 
+import { STAKE_MAX, STAKE_MIN, stakeWithinLimits } from "@/lib/stake";
 import { useSyncExternalStore } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { AuditLog, Comment, Community, DailyBeef, Duel, Notification, Post, ReactionKind, Reaction, User } from "@/lib/types";
@@ -343,9 +344,6 @@ export interface CreateDuelInput {
   extra?: { userId: string; ticker: string }[]; // group beef
 }
 
-/** stakes in test usdc (the escrow caps them at 25) */
-export const STAKE_OPTIONS = [1, 5, 10, 20, 25];
-export const MAX_STAKE = 25;
 
 /**
  * records the challenge in the database as unfunded. it only becomes a real duel once
@@ -356,7 +354,7 @@ export async function createDuel(input: CreateDuelInput): Promise<Duel> {
   throttle("duel", 4, 60_000);
   const tickers = [input.myTicker, input.opponentTicker, ...(input.extra ?? []).map((e) => e.ticker)];
   if (new Set(tickers).size !== tickers.length) throw new ActionError("each side needs a different stock");
-  if (!STAKE_OPTIONS.includes(input.stake)) throw new ActionError("pick a stake from the list");
+  if (!stakeWithinLimits(input.stake)) throw new ActionError(`stakes are ${STAKE_MIN} to ${STAKE_MAX} test usdc, in whole cents`);
   if (new Date(input.deadline).getTime() <= Date.now()) throw new ActionError("the deadline must be in the future");
   if (tickers.some((t) => !getAsset(t))) throw new ActionError("pick supported stocks");
   if (input.opponentId === userId || (input.extra ?? []).some((e) => e.userId === userId)) throw new ActionError("you can't challenge yourself");

@@ -11,6 +11,16 @@ export const BEEF_ESCROW_ABI = [
         "internalType": "address",
         "name": "_oracle",
         "type": "address"
+      },
+      {
+        "internalType": "uint256",
+        "name": "_minStake",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "_maxStake",
+        "type": "uint256"
       }
     ],
     "stateMutability": "nonpayable",
@@ -221,19 +231,6 @@ export const BEEF_ESCROW_ABI = [
     "type": "function"
   },
   {
-    "inputs": [],
-    "name": "MAX_STAKE",
-    "outputs": [
-      {
-        "internalType": "uint256",
-        "name": "",
-        "type": "uint256"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
     "inputs": [
       {
         "internalType": "bytes32",
@@ -379,6 +376,32 @@ export const BEEF_ESCROW_ABI = [
         "internalType": "bytes32",
         "name": "",
         "type": "bytes32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "maxStake",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "minStake",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
       }
     ],
     "stateMutability": "view",

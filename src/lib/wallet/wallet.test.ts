@@ -69,7 +69,8 @@ describe("sponsorship policy", () => {
     ["unknown contract", [{ to: OTHER, value: 0n, data: "0x" as Hex }]],
     ["usdc transfer", [{ to: USDC_ADDRESS, value: 0n, data: encodeFunctionData({ abi: erc20Abi, functionName: "transfer", args: [OTHER, 1n] }) }, accept[1]]],
     ["approval to another spender", [approve(OTHER, 10_000_000n), accept[1]]],
-    ["approval above the max stake", [approve(ESCROW, usdcUnits(26)), accept[1]]],
+    ["approval above the max stake", [approve(ESCROW, usdcUnits(1000.01)), accept[1]]],
+    ["approval below the min stake", [approve(ESCROW, usdcUnits(0.5)), accept[1]]],
     ["unlimited approval", [approve(ESCROW, 2n ** 256n - 1n), accept[1]]],
     ["approval with no escrow call (dangling allowance)", [approve(ESCROW, 10_000_000n)]],
     ["sending eth", [{ ...accept[1], value: 1n }]],
@@ -154,9 +155,26 @@ describe("intents", () => {
     expect(a.intent.calls).toHaveLength(2);
     const created = decodeFunctionData({ abi: BEEF_ESCROW_ABI, data: a.intent.calls[1].data as Hex });
     expect((created.args as any)[2]).toEqual([ALICE_SA, OPEN_SLOT]);
-    expect(a.summary.amountUsdc).toBe(10);
+    expect(a.summary.amountUsdc).toBe("10.00");
     const b = await prep("tok-alice");
     expect(b.intent.id).toBe(a.intent.id); // double tap -> same intent
+  });
+  it("custom decimal stakes: the approval and the escrow stake are exactly the duel's stake", async () => {
+    await linkBoth();
+    const custom = { ...duel, stake: 35.5 };
+    const a = await prep("tok-alice", "create", { loadDuel: async () => custom });
+    const approval = decodeFunctionData({ abi: erc20Abi, data: a.intent.calls[0].data as Hex });
+    const created = decodeFunctionData({ abi: BEEF_ESCROW_ABI, data: a.intent.calls[1].data as Hex });
+    expect([(approval.args as any)[1], (created.args as any)[1], a.intent.amountUnits]).toEqual([35_500_000n, 35_500_000n, "35500000"]);
+    expect(a.summary.amountUsdc).toBe("35.50");
+    const r = await prep("tok-bob", "accept", { loadDuel: async () => ({ ...custom, escrowState: "funded" as const }) });
+    expect((decodeFunctionData({ abi: erc20Abi, data: r.intent.calls[0].data as Hex }).args as any)[1]).toBe(35_500_000n);
+  });
+  it("rejects stakes outside the configured limits or with fractions of a cent", async () => {
+    await linkBoth();
+    for (const stake of [0.5, 1000.01, 10.005]) {
+      await expect(prep("tok-alice", "create", { loadDuel: async () => ({ ...duel, stake }) })).rejects.toMatchObject({ status: 400 });
+    }
   });
   it("accept needs a funded duel and a server-signed join", async () => {
     await linkBoth();
@@ -290,12 +308,12 @@ describe("receipt verification", () => {
     topics: encodeEventTopics({ abi: USER_OPERATION_EVENT, eventName: "UserOperationEvent", args: { userOpHash, sender: o.sender ?? ALICE_SA, paymaster: o.paymaster ?? OTHER } }) as [Hex, ...Hex[]],
     data: encodeAbiParameters([{ type: "uint256" }, { type: "bool" }, { type: "uint256" }, { type: "uint256" }], [0n, o.success ?? true, 1n, 1n]),
   });
-  const escrowLog = (eventName: "Created" | "Deposited" | "Joined", duelId = DUEL, who: Address = ALICE_SA) => ({
+  const escrowLog = (eventName: "Created" | "Deposited" | "Joined", duelId = DUEL, who: Address = ALICE_SA, stake = 10_000_000n) => ({
     address: ESCROW,
     topics: eventName === "Created"
       ? encodeEventTopics({ abi: BEEF_ESCROW_ABI, eventName, args: { duelId: duelIdToBytes32(duelId), creator: who } }) as [Hex, ...Hex[]]
       : encodeEventTopics({ abi: BEEF_ESCROW_ABI, eventName, args: { duelId: duelIdToBytes32(duelId), who } }) as [Hex, ...Hex[]],
-    data: eventName === "Created" ? encodeAbiParameters([{ type: "uint256" }, { type: "bytes32" }], [10_000_000n, keccak256("0x01")]) : "0x" as Hex,
+    data: eventName === "Created" ? encodeAbiParameters([{ type: "uint256" }, { type: "bytes32" }], [stake, keccak256("0x01")]) : "0x" as Hex,
   });
   const intent = { id: "i1", userId: "alice", smartAccount: ALICE_SA, action: "create" as const, duelId: DUEL, amountUnits: "10000000", callsHash: "0x" as Hex, calls: [], status: "sponsored" as const, createdAt: "", expiresAt: "" };
 
@@ -309,6 +327,7 @@ describe("receipt verification", () => {
     ["someone else's op", { status: "success", logs: [uoLog({ sender: BOB_SA }), escrowLog("Created")] }, /not found/],
     ["missing escrow event", { status: "success", logs: [uoLog({})] }, /escrow didn't record/],
     ["event for another duel", { status: "success", logs: [uoLog({}), escrowLog("Created", "other")] }, /escrow didn't record/],
+    ["duel created with a different stake than the one shown", { status: "success", logs: [uoLog({}), escrowLog("Created", DUEL, ALICE_SA, 1_000_000n)] }, /escrow didn't record/],
     ["duel created by someone else", { status: "success", logs: [uoLog({}), escrowLog("Created", DUEL, BOB_SA)] }, /escrow didn't record/],
   ])("rejects %s", (_n, receipt, re) => {
     const r = verifyReceipt(receipt as any, intent, userOpHash, ESCROW);

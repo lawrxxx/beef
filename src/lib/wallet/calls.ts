@@ -16,7 +16,6 @@ export const SMART_WALLET_ABI = parseAbi([
   "function executeBatch((address target, uint256 value, bytes data)[] calls)",
 ]);
 
-export const MAX_STAKE_USDC = 25;
 export const usdcUnits = (amount: number) => parseUnits(amount.toFixed(USDC_DECIMALS), USDC_DECIMALS);
 
 /** onchain duel id: a stable hash of the app's duel id */
@@ -87,3 +86,9 @@ export function callsHash(calls: Call[]): Hex {
 export const serializeCalls = (calls: Call[]) => calls.map((c) => ({ to: c.to, value: c.value.toString(), data: c.data }));
 export const deserializeCalls = (calls: { to: string; value: string; data: string }[]): Call[] =>
   calls.map((c) => ({ to: getAddress(c.to), value: BigInt(c.value), data: c.data as Hex }));
+
+/** the escrow an intent talks to: the target of its non-usdc call */
+export function escrowOfCalls(calls: { to: string }[], usdc: string): Address | null {
+  const c = calls.find((x) => getAddress(x.to) !== getAddress(usdc));
+  return c ? getAddress(c.to) : null;
+}

@@ -88,7 +88,7 @@ const run = Date.now().toString(36).slice(-5);
   await b.goto(B + '/notifications', { waitUntil: 'networkidle' });
   ok(await see(b, 'started following you', 15000), 'bob notified of the follow (db trigger)');
 
-  // duel: alice challenges bob. it's saved unfunded and needs the escrow before anyone can accept
+  // stake step (4 of 6): presets, custom amounts, live prize pool, wallet gating
   await a.goto(B + '/duel/new?vs=', { waitUntil: 'networkidle' });
   await a.getByLabel('search people').fill(`bob${run}`);
   await a.getByRole('button', { name: new RegExp(`bob${run}`) }).click();
@@ -98,23 +98,67 @@ const run = Date.now().toString(36).slice(-5);
   await a.getByRole('button', { name: 'continue' }).click();
   await a.getByRole('button', { name: /^NVDA/ }).click();
   await a.getByRole('button', { name: 'continue' }).click();
-  await a.getByRole('button', { name: '5', exact: true }).click();
-  for (let i = 0; i < 2; i++) await a.getByRole('button', { name: 'continue' }).click();
-  ok(await see(a, 'base sepolia (testnet)') && await see(a, 'none · gas covered by beef'), 'review shows network, token and fees');
-  await a.getByRole('checkbox').check();
-  await a.getByRole('button', { name: /continue to lock your stake/ }).click();
-  ok(await see(a, 'one more step: lock your stake', 15000), 'duel saved unfunded; creator asked to lock the stake');
-  ok(await see(a, /escrow contract isn't deployed|wallets aren't switched on|stakes/), 'funding card renders from onchain config');
-  ok(await a.getByText(/practice|simulate acceptance/).count() === 0, 'no practice money or demo buttons');
-  await a.getByRole('link', { name: 'view duel' }).click();
-  await a.waitForURL(/\/duel\/[0-9a-f-]{36}$/);
-  const link = a.url();
+  ok(await see(a, 'step 4 of 6'), 'reached the stake step');
+  const cards = async () => (await a.locator('.grid-cols-3.text-center .num').allInnerTexts()).join(' | ');
+  for (const [v, pot] of [['1', '2.00'], ['5', '10.00'], ['10', '20.00'], ['20', '40.00'], ['25', '50.00']]) {
+    await a.getByRole('button', { name: v, exact: true }).click();
+    const c = await cards();
+    ok(c === `${Number(v).toFixed(2)} | ${Number(v).toFixed(2)} | ${pot}` && await a.getByRole('button', { name: v, exact: true }).getAttribute('aria-pressed') === 'true', `preset ${v}: cards ${c}`);
+  }
+  await a.getByRole('button', { name: 'custom', exact: true }).click();
+  const input = a.getByLabel('your stake');
+  ok(await input.isVisible(), 'custom shows a numeric input');
+  ok(await input.getAttribute('inputmode') === 'decimal' && await see(a, 'test usdc', 2000), 'input is decimal and labelled test usdc');
+  await input.fill('35.50');
+  ok(await cards() === '35.50 | 35.50 | 71.00', `custom 35.50 → ${await cards()}`);
+  await input.fill('35.5');
+  ok(await cards() === '35.50 | 35.50 | 71.00', 'custom 35.5 normalises to 35.50');
+  await input.fill('150');
+  ok(await cards() === '150.00 | 150.00 | 300.00', 'custom above 25: 150 → pool 300.00');
+  for (const [val, msg] of [['35.555', /at most 2 decimal/], ['0', /more than zero/], ['0.50', /minimum stake is 1.00/], ['1000.01', /maximum stake is 1000.00/]]) {
+    await input.fill(val);
+    ok(await see(a, msg, 3000) && await cards() === '— | — | —', `rejects ${val}`);
+  }
+  await input.fill('');
+  await input.pressSequentially('-12abc');
+  ok(await input.inputValue() === '12', 'letters and minus signs can\'t be typed');
+  await input.fill('35.50');
+  await a.getByRole('button', { name: '10', exact: true }).click();
+  ok(await cards() === '10.00 | 10.00 | 20.00', 'switch custom → preset');
+  await a.getByRole('button', { name: 'custom', exact: true }).click();
+  ok(await input.inputValue() === '35.50' && await cards() === '35.50 | 35.50 | 71.00', 'switch back keeps the custom amount');
+  ok(await see(a, /wallets aren't switched on|connect your beef wallet|available balance/), 'wallet balance area renders under the options');
+  ok(await a.getByRole('button', { name: 'continue' }).isDisabled(), 'continue blocked without a connected, funded wallet');
+  ok(await a.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth), 'no horizontal overflow on mobile');
+  await a.getByRole('button', { name: 'back' }).click();
+  ok(await see(a, 'step 3 of 6'), 'back to step 3');
+  await a.getByRole('button', { name: 'continue' }).click();
+  ok(await input.inputValue() === '35.50' && await cards() === '35.50 | 35.50 | 71.00', 'stake kept across back and forward');
+
+  // a 35.50 challenge (written the way the store writes it, since funding needs a real wallet)
+  const SB = process.env.SUPABASE_URL, ANON = process.env.SUPABASE_ANON_KEY;
+  const tok = await (await fetch(`${SB}/auth/v1/token?grant_type=password`, { method: 'POST', headers: { apikey: ANON, 'content-type': 'application/json' }, body: JSON.stringify({ email: `alice.${run}@example.com`, password: 'supersecret1' }) })).json();
+  const H = { apikey: ANON, authorization: `Bearer ${tok.access_token}`, 'content-type': 'application/json', prefer: 'return=minimal' };
+  const bobId = (await (await fetch(`${SB}/rest/v1/profiles?select=id&username=eq.bob${run}`, { headers: H })).json())[0].id;
+  const duelId = crypto.randomUUID();
+  const deadline = new Date(Date.now() + 5 * 864e5).toISOString();
+  const ins = await fetch(`${SB}/rest/v1/duels`, { method: 'POST', headers: H, body: JSON.stringify({ id: duelId, created_by: tok.user.id, stake: 35.5, deadline, deadline_label: 'friday', invite_expires_at: new Date(Date.now() + 47 * 3600e3).toISOString(), price_rule: 'official closes', settlement_rule: 'higher return wins' }) });
+  await fetch(`${SB}/rest/v1/duel_participants`, { method: 'POST', headers: H, body: JSON.stringify({ duel_id: duelId, user_id: tok.user.id, ticker: 'NVDA', accepted: true, accepted_at: new Date().toISOString() }) });
+  await fetch(`${SB}/rest/v1/duel_participants`, { method: 'POST', headers: H, body: JSON.stringify({ duel_id: duelId, user_id: bobId, ticker: 'AMD', accepted: false }) });
+  ok(ins.status === 201, `database accepts a 35.50 stake (${ins.status})`);
+  const bad = await fetch(`${SB}/rest/v1/duels`, { method: 'POST', headers: H, body: JSON.stringify({ created_by: tok.user.id, stake: 1000.01, deadline, deadline_label: 'x', invite_expires_at: deadline, price_rule: 'x', settlement_rule: 'x' }) });
+  ok(bad.status >= 400, `database rejects 1000.01 (${bad.status})`);
 
   await b.goto(B + '/notifications', { waitUntil: 'networkidle' });
-  ok(await see(b, /challenged you: nvda vs amd/, 15000), 'bob gets the invite notification (db trigger)');
-  await b.goto(link, { waitUntil: 'networkidle' });
+  ok(await see(b, /challenged you: nvda vs amd, 35\.50 test usdc each/, 15000), 'invite notification shows the exact stake');
+  await b.goto(B + `/duel/${duelId}`, { waitUntil: 'networkidle' });
   ok(await see(b, /wants to beef/), 'bob sees the challenge');
+  ok(await see(b, /for 35\.50 test usdc each \(prize pool 71\.00 test usdc\)/), 'opponent sees the required stake and pool before accepting');
+  ok(await see(b, '35.50 test usdc each · '), 'duel header shows 35.50 each');
   ok(await b.getByRole('button', { name: /^accept/ }).count() === 0, 'no off-chain accept: joining needs the escrow');
+  await b.goto(B + '/duel', { waitUntil: 'networkidle' });
+  ok(await see(b, '71.00 test usdc pot'), 'duel card shows the exact pool');
+  await b.goto(B + `/duel/${duelId}`, { waitUntil: 'networkidle' });
   await b.getByRole('button', { name: 'decline' }).click();
   ok(await see(b, /declined/, 15000), 'decline_duel rpc');
   await a.goto(B + '/notifications', { waitUntil: 'networkidle' });

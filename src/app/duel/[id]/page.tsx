@@ -1,5 +1,6 @@
 "use client";
 
+import { fmtStake, formatUsdc, prizePoolUnits, stakeUnits } from "@/lib/stake";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useState } from "react";
@@ -51,7 +52,8 @@ function DuelView({ d }: { d: Duel }) {
   const st = d.settlement;
   const done = d.status === "completed" && st;
   const group = d.participants.length > 2;
-  const pot = d.stake * d.participants.length;
+  const potUnits = prizePoolUnits(stakeUnits(d.stake), d.participants.length);
+  const pot = formatUsdc(potUnits);
   const mine = isParticipant(d, me?.id ?? null);
   const acceptable = canAccept(d, me?.id ?? null);
   const sorted = [...perf].sort((a, b) => (b.ret ?? -1e9) - (a.ret ?? -1e9));
@@ -71,7 +73,7 @@ function DuelView({ d }: { d: Duel }) {
 
       {d.title && <h1 className="mb-1 font-display text-2xl font-bold tracking-tight">{d.title}</h1>}
       <p className="mb-4 text-[15px] text-muted">
-        {usd(d.stake, 0)} each · <b className="text-ink">{usd(pot, 0)} pot</b> · {d.deadlineLabel}
+        {fmtStake(d.stake)} test usdc each · <b className="text-ink">{pot} test usdc pot</b> · {d.deadlineLabel}
         {d.communityId && <> · <Link className="underline" href={`/communities/${s.communities.find((c) => c.id === d.communityId)?.slug}`}>{s.communities.find((c) => c.id === d.communityId)?.name}</Link></>}
       </p>
 
@@ -79,7 +81,7 @@ function DuelView({ d }: { d: Duel }) {
       <div className="card overflow-hidden">
         {done && (
           <div className={cx("px-4 py-3 text-center text-sm font-semibold", st.status === "draw" ? "bg-black/[.04]" : "bg-gold-soft text-gold")}>
-            {st.status === "draw" ? "🤝 a dead heat. stakes returned." : `🏆 ${st.winners.map((w) => usersMap[w]?.displayName ?? "?").join(" & ")} ${st.winners.length > 1 ? "win" : "wins"} ${usd(pot / st.winners.length, 0)}`}
+            {st.status === "draw" ? "🤝 a dead heat. stakes returned." : `🏆 ${st.winners.map((w) => usersMap[w]?.displayName ?? "?").join(" & ")} ${st.winners.length > 1 ? "win" : "wins"} ${formatUsdc(potUnits / BigInt(Math.max(1, st.winners.length)))} test usdc`}
           </div>
         )}
         {live && leader && (
@@ -119,11 +121,11 @@ function DuelView({ d }: { d: Duel }) {
           </div>
           <div className="border-r p-3">
             <p className="text-xs text-muted">stake</p>
-            <p className="num mt-0.5 font-semibold">{usd(d.stake, 0)} each</p>
+            <p className="num mt-0.5 font-semibold">{fmtStake(d.stake)} each</p><p className="text-[10px] text-muted">test usdc</p>
           </div>
           <div className="p-3">
             <p className="text-xs text-muted">prize pool</p>
-            <p className="num mt-0.5 font-semibold">{usd(pot, 0)}</p>
+            <p className="num mt-0.5 font-semibold">{pot}</p><p className="text-[10px] text-muted">test usdc</p>
           </div>
         </div>
         <div className="flex items-center justify-between border-t px-4 py-2.5 text-[13px]">
@@ -138,7 +140,7 @@ function DuelView({ d }: { d: Duel }) {
           <div className="card p-4">
             <p className="font-semibold">{usersMap[d.createdBy]?.displayName} wants to beef</p>
             <p className="mt-1 text-sm text-muted">
-              you'd take <b className="text-ink">{d.participants.find((p) => p.userId === me?.id && !p.accepted)?.ticker ?? d.participants.find((p) => p.userId === "")?.ticker}</b> for {d.stake} test usdc each. accepting locks your stake in the escrow until it settles. read the <button className="underline" onClick={() => setShowTerms(true)}>terms</button>. invitation expires {marketTime(d.inviteExpiresAt)}.
+              you'd take <b className="text-ink">{d.participants.find((p) => p.userId === me?.id && !p.accepted)?.ticker ?? d.participants.find((p) => p.userId === "")?.ticker}</b> for {fmtStake(d.stake)} test usdc each (prize pool {pot} test usdc). accepting locks your stake in the escrow until it settles. read the <button className="underline" onClick={() => setShowTerms(true)}>terms</button>. invitation expires {marketTime(d.inviteExpiresAt)}.
             </p>
             {!d.open && <button className="btn-outline btn-sm mt-3" onClick={() => run(() => declineDuel(d.id), "declined")}>decline</button>}
           </div>
@@ -151,7 +153,7 @@ function DuelView({ d }: { d: Duel }) {
             <p className="flex items-center gap-2 font-semibold"><Clock size={17} /> waiting for {d.open ? "someone to accept" : d.participants.filter((p) => !p.accepted).map((p) => `@${usersMap[p.userId]?.username}`).join(", ")}</p>
             <p className="mt-1 text-sm text-muted">{d.escrowState === "unfunded" ? "lock your stake below to send it." : `invitation expires ${marketTime(d.inviteExpiresAt)}.`}</p>
             <div className="mt-3 grid grid-cols-2 gap-2">
-              <button className="btn-dark btn-sm" disabled={d.escrowState === "unfunded"} onClick={() => shareLink(inviteLink(d), `${me?.displayName} challenged you on beef: ${d.participants.map((p) => p.ticker).join(" vs ")}, ${d.stake} test usdc each.`)}><Share2 size={15} /> share invite</button>
+              <button className="btn-dark btn-sm" disabled={d.escrowState === "unfunded"} onClick={() => shareLink(inviteLink(d), `${me?.displayName} challenged you on beef: ${d.participants.map((p) => p.ticker).join(" vs ")}, ${fmtStake(d.stake)} test usdc each.`)}><Share2 size={15} /> share invite</button>
               {d.createdBy === me?.id && <button className="btn-outline btn-sm" onClick={() => run(() => cancelDuel(d.id), "duel cancelled")}>cancel</button>}
             </div>
           </div>
@@ -236,7 +238,8 @@ function DuelView({ d }: { d: Duel }) {
           <dl className="divide-y border-t text-sm">
             {[
               ["stocks", d.participants.map((p) => `${p.ticker} (@${usersMap[p.userId]?.username ?? "open"})`).join(" vs ")],
-              ["stake", `${d.stake} test usdc each, held by the beef escrow on base sepolia`],
+              ["stake", `${fmtStake(d.stake)} test usdc each, held by the beef escrow on base sepolia`],
+              ["prize pool", `${pot} test usdc`],
               ["comparison", "percentage return, official closing prices"],
               ["price lock", d.terms.priceRule],
               ["deadline", marketTime(d.deadline)],

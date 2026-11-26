@@ -5,8 +5,8 @@ import {
   useAuthenticateWithJWT, useCurrentUser, useGetAccessToken, useIsInitialized, useIsSignedIn, useSendUserOperation,
 } from "@coinbase/cdp-hooks";
 import { createPublicClient, erc20Abi, formatUnits, http, type Address, type Hex } from "viem";
-import { CDP_NETWORK, CHAIN, CHAIN_ID, ESCROW_ADDRESS, RPC_URL, USDC_ADDRESS, USDC_DECIMALS, assertBaseSepolia } from "@/lib/chain/config";
-import { deserializeCalls, duelIdToBytes32, usdcUnits } from "@/lib/wallet/calls";
+import { CDP_NETWORK, CHAIN, CHAIN_ID, KNOWN_ESCROWS, RPC_URL, USDC_ADDRESS, USDC_DECIMALS, assertBaseSepolia } from "@/lib/chain/config";
+import { deserializeCalls, duelIdToBytes32 } from "@/lib/wallet/calls";
 import { BEEF_ESCROW_ABI } from "@/lib/wallet/escrow-abi";
 import { useBeef } from "@/lib/store/store";
 import { CDP_AUTH } from "./cdp-provider";
@@ -73,20 +73,19 @@ export function useBeefWallet() {
     try {
       const units = await publicClient.readContract({ address: USDC_ADDRESS, abi: erc20Abi, functionName: "balanceOf", args: [smartAccount] });
       setWallet({ units, loading: false, error: null, at: Date.now() });
-      if (ESCROW_ADDRESS && myEscrowDuels.length) {
-        const res = await publicClient.multicall({
-          contracts: myEscrowDuels.map((d) => ({ address: ESCROW_ADDRESS!, abi: BEEF_ESCROW_ABI, functionName: "deposited" as const, args: [duelIdToBytes32(d.id), smartAccount] as const })),
-          allowFailure: true,
-        });
-        const states = await publicClient.multicall({
-          contracts: myEscrowDuels.map((d) => ({ address: ESCROW_ADDRESS!, abi: BEEF_ESCROW_ABI, functionName: "getDuel" as const, args: [duelIdToBytes32(d.id)] as const })),
-          allowFailure: true,
-        });
+      if (KNOWN_ESCROWS.length && myEscrowDuels.length) {
+        // stakes can sit in the current escrow or an older one; count what the chain says is ours
+        const pairs = KNOWN_ESCROWS.flatMap((escrow) => myEscrowDuels.map((d) => ({ escrow, key: duelIdToBytes32(d.id) })));
+        const [res, states] = await Promise.all([
+          publicClient.multicall({ contracts: pairs.map((p) => ({ address: p.escrow, abi: BEEF_ESCROW_ABI, functionName: "deposited" as const, args: [p.key, smartAccount] as const })), allowFailure: true }),
+          publicClient.multicall({ contracts: pairs.map((p) => ({ address: p.escrow, abi: BEEF_ESCROW_ABI, functionName: "getDuel" as const, args: [p.key] as const })), allowFailure: true }),
+        ]);
         let sum = 0n;
-        myEscrowDuels.forEach((d, i) => {
+        pairs.forEach((_, i) => {
           const dep = res[i]?.status === "success" && res[i].result === true;
-          const st = states[i]?.status === "success" ? Number((states[i].result as readonly unknown[])[5]) : 0;
-          if (dep && (st === 1 || st === 2)) sum += usdcUnits(d.stake); // funding or active
+          const duel = states[i]?.status === "success" ? (states[i].result as readonly unknown[]) : null;
+          const st = duel ? Number(duel[5]) : 0;
+          if (dep && duel && (st === 1 || st === 2)) sum += duel[0] as bigint; // the stake the escrow actually holds
         });
         setLocked(sum);
       } else setLocked(0n);
@@ -182,7 +181,10 @@ export function useBeefWallet() {
   return {
     authMode: CDP_AUTH, isInitialized, isSignedIn, user: currentUser, smartAccount, eoa, link, relink,
     connectWithBeefAccount,
-    balance: { available, locked: lockedUsdc, total: available == null ? null : available + lockedUsdc, loading: wallet.loading, error: wallet.error, at: wallet.at, units: wallet.units },
+    balance: {
+      available, locked: lockedUsdc, total: available == null ? null : available + lockedUsdc, loading: wallet.loading, error: wallet.error, at: wallet.at,
+      units: wallet.units, lockedUnits: locked, totalUnits: wallet.units == null ? null : wallet.units + (locked ?? 0n),
+    },
     activity, refreshActivity, refreshBalance, runDuelAction, confirm,
     userOp: { status: userOp.status, data: userOp.data, error: userOp.error },
   };

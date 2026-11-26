@@ -1,5 +1,6 @@
 "use client";
 
+import { fmtStake, formatUsdc, prizePoolUnits, stakeUnits } from "@/lib/stake";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { ArrowRight, Swords, Users } from "lucide-react";
@@ -101,7 +102,7 @@ export default function HomePage() {
                   <Avatar user={by} size={40} />
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-[15px]"><b>{by?.displayName}</b> challenged you</p>
-                    <p className="truncate text-[13px] text-ink-soft">{d.participants.map((p) => p.ticker).join(" vs ")} · {usd(d.stake, 0)} each · {d.deadlineLabel}</p>
+                    <p className="truncate text-[13px] text-ink-soft">{d.participants.map((p) => p.ticker).join(" vs ")} · {fmtStake(d.stake)} test usdc each · {d.deadlineLabel}</p>
                   </div>
                   <span className="btn-dark btn-sm shrink-0">view</span>
                 </Link>

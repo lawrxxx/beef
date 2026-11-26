@@ -1,9 +1,10 @@
 import "server-only";
 import { decodeEventLog, getAddress, isAddress, isHex, parseAbi, type Address, type Hex, type TransactionReceipt } from "viem";
-import { CHAIN_ID, ENTRYPOINTS, ESCROW_ADDRESS, USDC_ADDRESS, assertBaseSepolia } from "@/lib/chain/config";
+import { CHAIN_ID, ENTRYPOINTS, ESCROW_ADDRESS, USDC_ADDRESS, assertBaseSepolia, isKnownEscrow } from "@/lib/chain/config";
+import { formatUsdc, stakeUnits, stakeWithinLimits, STAKE_MAX, STAKE_MIN } from "@/lib/stake";
 import {
   OPEN_SLOT, buildCreateDuelCalls, buildJoinCalls, buildRefundCalls, buildSettleCalls, callsHash, decodeSmartAccountCallData, deserializeCalls,
-  duelIdToBytes32, serializeCalls, termsHash, usdcUnits, type Call,
+  duelIdToBytes32, serializeCalls, termsHash, escrowOfCalls, type Call,
 } from "@/lib/wallet/calls";
 import { checkCalls, checkLimits, defaultPolicy, type SponsorshipPolicy } from "@/lib/wallet/policy";
 import { BEEF_ESCROW_ABI } from "@/lib/wallet/escrow-abi";
@@ -80,6 +81,15 @@ export interface PrepareDeps {
   newId?: () => string;
   sign?: (p: { escrow: Address; duelId: string; termsHash: Hex; winners: Address[]; settlementHash: Hex }) => Promise<Hex>;
   signJoin?: (p: { escrow: Address; duelId: string; who: Address }) => Promise<Hex>;
+  /** which escrow already holds this duel (read from base sepolia). absent → the current escrow */
+  resolveEscrow?: (duelId: string) => Promise<Address | null>;
+}
+
+/** the escrow an intent's calls go to, if it's one beef knows (or the one a test injected) */
+function intentEscrow(intent: WalletIntent, usdc: Address, override: Address | null | undefined): Address | null {
+  if (override !== undefined) return override;
+  const e = escrowOfCalls(deserializeCalls(intent.calls), usdc);
+  return e && isKnownEscrow(e) ? e : null;
 }
 
 /**
@@ -90,10 +100,10 @@ export interface PrepareDeps {
 export async function prepareIntent(
   p: { accessToken: string; action: IntentAction; duelId: string; appUserId?: string },
   deps: PrepareDeps,
-): Promise<{ intent: WalletIntent; summary: { action: IntentAction; amountUsdc: number; spender: Address; network: string } }> {
-  const escrow = deps.escrow === undefined ? ESCROW_ADDRESS : deps.escrow;
+): Promise<{ intent: WalletIntent; summary: { action: IntentAction; amountUsdc: string; spender: Address; network: string } }> {
+  const current = deps.escrow === undefined ? ESCROW_ADDRESS : deps.escrow;
   const usdc = deps.usdc ?? USDC_ADDRESS;
-  if (!escrow) throw new WalletError("onchain stakes aren't available yet: the beef escrow contract isn't deployed on base sepolia.", 503);
+  if (!current) throw new WalletError("onchain stakes aren't available yet: the beef escrow contract isn't deployed on base sepolia.", 503);
   const eu = await deps.verify(p.accessToken);
   const link = await deps.repo.getLinkByCdpUser(eu.cdpUserId);
   if (!link) throw new WalletError("link your wallet to your beef account first.", 409);
@@ -107,7 +117,11 @@ export async function prepareIntent(
 
   const existing = await deps.repo.findOpenIntent(link.userId, duel.id, p.action);
   if (existing?.status === "confirmed") throw new WalletError("you've already done this for this duel.", 409);
-  if (existing) return { intent: existing, summary: summarize(existing, escrow) }; // duplicate tap → same intent
+  if (existing) return { intent: existing, summary: summarize(existing, intentEscrow(existing, usdc, deps.escrow) ?? current) }; // duplicate tap → same intent
+
+  // new duels open on the current escrow; everything after that goes to whichever escrow holds the duel
+  const escrow = p.action === "create" || !deps.resolveEscrow ? current : (await deps.resolveEscrow(duel.id)) ?? current;
+  const stakeOk = stakeWithinLimits(duel.stake);
 
   let calls: Call[];
   let amount = 0;
@@ -115,6 +129,7 @@ export async function prepareIntent(
     if (duel.createdBy !== link.userId) throw new WalletError("only the creator opens the onchain duel", 403);
     if (duel.status !== "pending") throw new WalletError(`this duel is ${duel.status}`, 409);
     if (duel.escrowState && duel.escrowState !== "unfunded") throw new WalletError("this duel is already funded", 409);
+    if (!stakeOk) throw new WalletError(`stakes must be between ${STAKE_MIN} and ${STAKE_MAX} test usdc, in whole cents`, 400);
     // creator's wallet + one open slot per opponent. opponents take their slot with an
     // oracle-signed join, so their wallets don't need to exist yet.
     const wallets: Address[] = duel.participants.map((x) => (x.userId === link.userId ? link.smartAccount : OPEN_SLOT));
@@ -128,6 +143,7 @@ export async function prepareIntent(
     if (duel.createdBy === link.userId) throw new WalletError("you created this duel", 409);
     if (duel.escrowState !== "funded") throw new WalletError("the creator hasn't locked their stake yet. you can accept once they have.", 409);
     if (!deps.signJoin) throw new WalletError("joining duels isn't configured on the server yet", 503);
+    if (escrow === current && !stakeOk) throw new WalletError(`stakes must be between ${STAKE_MIN} and ${STAKE_MAX} test usdc`, 400);
     amount = duel.stake;
     const joinSig = await deps.signJoin({ escrow, duelId: duel.id, who: link.smartAccount });
     calls = buildJoinCalls({ usdc, escrow, duelId: duel.id, stake: duel.stake, joinSig });
@@ -156,14 +172,14 @@ export async function prepareIntent(
   const now = deps.now ?? new Date();
   const intent: WalletIntent = {
     id: deps.newId?.() ?? crypto.randomUUID(), userId: link.userId, smartAccount: link.smartAccount, action: p.action, duelId: duel.id,
-    amountUnits: usdcUnits(amount).toString(), callsHash: callsHash(calls), calls: serializeCalls(calls), status: "prepared",
+    amountUnits: (amount ? stakeUnits(amount) : 0n).toString(), callsHash: callsHash(calls), calls: serializeCalls(calls), status: "prepared",
     createdAt: now.toISOString(), expiresAt: new Date(now.getTime() + INTENT_TTL_MS).toISOString(),
   };
   await deps.repo.createIntent(intent);
   return { intent, summary: summarize(intent, escrow) };
 }
 
-const summarize = (i: WalletIntent, escrow: Address) => ({ action: i.action, amountUsdc: Number(i.amountUnits) / 1e6, spender: escrow, network: "base sepolia" });
+const summarize = (i: WalletIntent, escrow: Address) => ({ action: i.action, amountUsdc: formatUsdc(BigInt(i.amountUnits)), spender: escrow, network: "base sepolia" });
 
 // ---------- paymaster proxy ----------
 
@@ -190,7 +206,6 @@ const rpcError = (id: unknown, message: string, code = -32001) => ({ jsonrpc: "2
 export async function handlePaymasterRpc(body: any, deps: PaymasterDeps): Promise<unknown> {
   const id = body?.id;
   const now = deps.now ?? new Date();
-  const escrow = deps.escrow === undefined ? ESCROW_ADDRESS : deps.escrow;
   const usdc = deps.usdc ?? USDC_ADDRESS;
   const logRefusal = async (reason: string, sender: string | null = null, intentId: string | null = null) => {
     await deps.repo.log({ at: now.toISOString(), intentId, sender, method: String(body?.method ?? ""), decision: "refused", reason });
@@ -199,7 +214,7 @@ export async function handlePaymasterRpc(body: any, deps: PaymasterDeps): Promis
 
   if (body?.jsonrpc !== "2.0" || typeof body?.method !== "string") return rpcError(id, "invalid request", -32600);
   if (!SPONSOR_METHODS.has(body.method)) return logRefusal(`method ${body.method} is not supported`);
-  if (!escrow) return logRefusal("escrow not deployed");
+  if (!(deps.escrow === undefined ? ESCROW_ADDRESS : deps.escrow)) return logRefusal("escrow not deployed");
   const [userOp, entryPoint, chainId, context] = Array.isArray(body.params) ? body.params : [];
 
   try { assertBaseSepolia(chainId); } catch { return logRefusal(`wrong chain ${String(chainId)} (only base sepolia ${CHAIN_ID})`); }
@@ -216,6 +231,8 @@ export async function handlePaymasterRpc(body: any, deps: PaymasterDeps): Promis
   if (getAddress(intent.smartAccount) !== sender) return logRefusal("intent belongs to a different wallet", sender, intentId);
   if (!["prepared", "sponsored"].includes(intent.status)) return logRefusal(`intent is ${intent.status}`, sender, intentId);
   if (Date.parse(intent.expiresAt) < now.getTime()) return logRefusal("intent expired. start again.", sender, intentId);
+  const escrow = intentEscrow(intent, usdc, deps.escrow);
+  if (!escrow) return logRefusal("intent targets an unknown escrow", sender, intentId);
 
   let calls: Call[];
   try {
@@ -282,7 +299,8 @@ export function verifyReceipt(receipt: Pick<TransactionReceipt, "status" | "logs
     try {
       const ev = decodeEventLog({ abi: BEEF_ESCROW_ABI, data: log.data, topics: log.topics }) as { eventName: string; args: any };
       if (ev.eventName !== want || ev.args.duelId !== duelKey) return false;
-      if (want === "Created") return getAddress(ev.args.creator) === sender;
+      // the escrow pulls exactly `stake` from each participant, so checking it here proves the deposit amount
+      if (want === "Created") return getAddress(ev.args.creator) === sender && BigInt(ev.args.stake) === BigInt(intent.amountUnits);
       if (want === "Joined") return getAddress(ev.args.who) === sender;
       return true;
     } catch { return false; }
@@ -300,11 +318,11 @@ export interface ConfirmDeps {
 }
 
 export async function confirmIntent(p: { accessToken: string; intentId: string; userOpHash: Hex; txHash: Hex }, deps: ConfirmDeps) {
-  const escrow = deps.escrow === undefined ? ESCROW_ADDRESS : deps.escrow;
-  if (!escrow) throw new WalletError("escrow not deployed", 503);
   const eu = await deps.verify(p.accessToken);
   const intent = await deps.repo.getIntent(p.intentId);
   if (!intent) throw new WalletError("unknown transaction", 404);
+  const escrow = intentEscrow(intent, USDC_ADDRESS, deps.escrow);
+  if (!escrow) throw new WalletError("escrow not deployed", 503);
   const link = await deps.repo.getLinkByCdpUser(eu.cdpUserId);
   if (!link || link.userId !== intent.userId) throw new WalletError("not your transaction", 403);
   if (intent.status === "confirmed") return intent; // idempotent

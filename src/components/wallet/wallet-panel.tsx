@@ -1,5 +1,6 @@
 "use client";
 
+import { formatUsdc } from "@/lib/stake";
 import Link from "next/link";
 import { useState, type ReactNode } from "react";
 import {
@@ -14,7 +15,7 @@ import { toast } from "@/components/share";
 import { friendly, useBeefWallet, useFundingWatch, type ActivityItem } from "./use-beef-wallet";
 import { cdpEnabled, useCdpReady } from "./cdp-provider";
 
-export const usdcLabel = (n: number | null | undefined) => (n == null ? "—" : `${n.toFixed(2)} test usdc`);
+export const usdcLabel = (units: bigint | null | undefined) => (units == null ? "—" : `${formatUsdc(units)} test usdc`);
 
 function GoogleIcon() {
   return <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden><path fill="#4285F4" d="M23.5 12.3c0-.8-.1-1.6-.2-2.3H12v4.4h6.5a5.6 5.6 0 0 1-2.4 3.6v3h3.9c2.3-2.1 3.5-5.2 3.5-8.7z" /><path fill="#34A853" d="M12 24c3.2 0 6-1.1 8-2.9l-3.9-3c-1.1.7-2.5 1.2-4.1 1.2-3.1 0-5.8-2.1-6.7-5H1.3v3.1A12 12 0 0 0 12 24z" /><path fill="#FBBC05" d="M5.3 14.3a7.2 7.2 0 0 1 0-4.6V6.6H1.3a12 12 0 0 0 0 10.8l4-3.1z" /><path fill="#EA4335" d="M12 4.8c1.8 0 3.3.6 4.6 1.8l3.4-3.4A12 12 0 0 0 1.3 6.6l4 3.1c.9-2.9 3.6-4.9 6.7-4.9z" /></svg>;
@@ -149,7 +150,7 @@ export function FundWallet({ compact }: { compact?: boolean }) {
         <button className="btn-outline btn-sm" disabled={w.balance.loading} onClick={() => void w.refreshBalance()}><RefreshCw size={14} className={cx(w.balance.loading && "animate-spin")} /> refresh balance</button>
       </div>
       {watch.state === "waiting" && <p className="mt-2 flex items-center gap-1.5 text-[13px] text-gold"><Loader2 size={13} className="animate-spin" /> waiting for test usdc to arrive on base sepolia… this can take a minute.</p>}
-      {watch.state === "arrived" && <p className="mt-2 flex items-center gap-1.5 text-[13px] text-gain"><CheckCircle2 size={14} /> test usdc arrived. balance: {usdcLabel(w.balance.available)}</p>}
+      {watch.state === "arrived" && <p className="mt-2 flex items-center gap-1.5 text-[13px] text-gain"><CheckCircle2 size={14} /> test usdc arrived. balance: {usdcLabel(w.balance.units)}</p>}
       {watch.state === "timeout" && <p className="mt-2 text-[13px] text-muted">nothing has arrived yet. check the faucet used base sepolia and your exact address, then tap refresh.</p>}
       <p className="mt-2 text-xs text-muted">test usdc has no monetary value. the faucet limits how often you can request it.</p>
     </div>
@@ -168,13 +169,13 @@ export function Balances() {
       </div>
       <div className="grid grid-cols-3 divide-x text-center">
         {[
-          ["available", w.balance.available],
-          ["in duels", w.balance.locked],
-          ["total", w.balance.total],
+          ["available", w.balance.units],
+          ["in duels", w.balance.units == null ? null : w.balance.lockedUnits],
+          ["total", w.balance.totalUnits],
         ].map(([k, v]) => (
           <div key={k as string} className="px-2 py-3">
             <p className="text-[11px] text-muted">{k}</p>
-            <p className="num font-display text-lg font-bold">{v == null ? (w.balance.loading ? "…" : "—") : (v as number).toFixed(2)}</p>
+            <p className="num font-display text-lg font-bold">{v == null ? (w.balance.loading ? "…" : "—") : formatUsdc(v as bigint)}</p>
             <p className="text-[10px] text-muted">test usdc</p>
           </div>
         ))}

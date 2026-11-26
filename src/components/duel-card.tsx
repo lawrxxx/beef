@@ -1,5 +1,6 @@
 "use client";
 
+import { fmtStake, formatUsdc, prizePoolUnits, stakeUnits } from "@/lib/stake";
 import Link from "next/link";
 import { Clock, Crown, Users } from "lucide-react";
 import type { Duel } from "@/lib/types";
@@ -40,7 +41,8 @@ export function DuelCard({ d, compact }: { d: Duel; compact?: boolean }) {
   const done = d.status === "completed" && d.settlement;
   const leaderRet = Math.max(...perf.map((p) => p.ret ?? -Infinity));
   const group = d.participants.length > 2;
-  const pot = d.stake * d.participants.length;
+  const potUnits = prizePoolUnits(stakeUnits(d.stake), d.participants.length);
+  const pot = formatUsdc(potUnits);
 
   return (
     <Link href={`/duel/${d.id}`} className="card block p-4 transition hover:shadow-pop">
@@ -50,7 +52,7 @@ export function DuelCard({ d, compact }: { d: Duel; compact?: boolean }) {
           {group && <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-muted"><Users size={12} /> group</span>}
           {d.title && <span className="truncate text-[13px] text-muted">{d.title}</span>}
         </div>
-        <span className="num shrink-0 text-[13px] font-semibold">{usd(pot, 0)} pot</span>
+        <span className="num shrink-0 text-[13px] font-semibold">{pot} test usdc pot</span>
       </div>
 
       <div className={cx("grid gap-2", group ? "grid-cols-2" : "grid-cols-[1fr_auto_1fr] items-center")}>
@@ -83,7 +85,7 @@ export function DuelCard({ d, compact }: { d: Duel; compact?: boolean }) {
       {!group && (live || done) && <div className="mt-3"><VersusBar a={perf[0]?.ret ?? null} b={perf[1]?.ret ?? null} /></div>}
 
       <div className="mt-3 flex items-center justify-between text-[13px] text-muted">
-        <span>{usd(d.stake, 0)} each</span>
+        <span>{fmtStake(d.stake)} test usdc each</span>
         {live || d.status === "accepted" ? (
           <span className="num inline-flex items-center gap-1"><Clock size={13} /> {countdown(d.deadline, now)} left</span>
         ) : done ? (

@@ -67,7 +67,7 @@ function FundStepInner({ onDone }: { onDone: () => void }) {
     <div className="space-y-3">
       <div className="card p-4">
         <p className="text-[13px] text-muted">current balance</p>
-        <p className="num font-display text-2xl font-bold">{w.balance.loading && w.balance.available == null ? "…" : usdcLabel(w.balance.available)}</p>
+        <p className="num font-display text-2xl font-bold">{w.balance.loading && w.balance.available == null ? "…" : usdcLabel(w.balance.units)}</p>
       </div>
       <FundWallet />
       <button className="btn-dark w-full" onClick={onDone}>{(w.balance.available ?? 0) > 0 ? "continue" : "skip for now"}</button>
@@ -84,17 +84,17 @@ export function DoneStep({ onFinish }: { onFinish: () => void }) {
 
 function DoneInner({ onFinish }: { onFinish: () => void }) {
   const w = useBeefWallet();
-  const bal = w.balance.available;
+  const bal = w.balance.units;
   return (
     <div className="space-y-3">
       <div className="card p-4 text-center">
         <p className="text-[13px] text-muted">your wallet balance</p>
         <p className="num font-display text-3xl font-bold">{bal == null ? "—" : usdcLabel(bal)}</p>
-        {bal === 0 && <p className="mt-2 text-sm text-ink-soft">you'll need test usdc before you can start or join a funded duel. you can still post, follow people and pick beef of the day right away.</p>}
-        {bal != null && bal > 0 && <p className="mt-2 text-sm text-ink-soft">you're ready to start a beef.</p>}
+        {bal === 0n && <p className="mt-2 text-sm text-ink-soft">you'll need test usdc before you can start or join a funded duel. you can still post, follow people and pick beef of the day right away.</p>}
+        {bal != null && bal > 0n && <p className="mt-2 text-sm text-ink-soft">you're ready to start a beef.</p>}
       </div>
       <button className="btn-primary w-full" onClick={onFinish}>start exploring</button>
-      {bal === 0 && <Link href="/wallet" onClick={onFinish} className="btn-ghost w-full">get test usdc first</Link>}
+      {bal === 0n && <Link href="/wallet" onClick={onFinish} className="btn-ghost w-full">get test usdc first</Link>}
     </div>
   );
 }

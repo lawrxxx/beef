@@ -21,6 +21,10 @@ const pub = createPublicClient({ chain, transport });
 const wallet = createWalletClient({ chain, transport });
 const acct = (a: Address): PrivateKeyAccount => ACCOUNTS.find((x) => x.address === a)!;
 
+// same defaults as the app (lib/stake.ts): 1 to 1000 test usdc per participant
+const MIN_UNITS = 1_000_000n, MAX_UNITS = 1_000_000_000n;
+const balanceUnits = async (a: Address) => BigInt(await read("balanceOf", [a], usdc, usdcAbi));
+
 let alice: Address, bob: Address, oracle: Address, mallory: Address, carol: Address;
 let usdc: Address, escrow: Address;
 const escrowAbi = escrowArtifact.abi as any;
@@ -58,11 +62,35 @@ async function settleSigned(duelId: string, winners: Address[], from: Address, k
 beforeAll(async () => {
   [alice, bob, oracle, mallory, carol] = ACCOUNTS.map((a) => a.address);
   usdc = await deploy(usdcArtifact.bytecode as Hex, usdcAbi, []);
-  escrow = await deploy(escrowArtifact.bytecode as Hex, escrowAbi, [usdc, oracle]);
-  for (const who of [alice, bob, mallory, carol]) await pub.waitForTransactionReceipt({ hash: await wallet.writeContract({ account: acct(alice), address: usdc, abi: usdcAbi, functionName: "mint", args: [who, usdcUnits(100)], chain }) });
+  escrow = await deploy(escrowArtifact.bytecode as Hex, escrowAbi, [usdc, oracle, MIN_UNITS, MAX_UNITS]);
+  for (const who of [alice, bob, mallory, carol]) await pub.waitForTransactionReceipt({ hash: await wallet.writeContract({ account: acct(alice), address: usdc, abi: usdcAbi, functionName: "mint", args: [who, usdcUnits(5000)], chain }) });
 });
 
 describe("BeefEscrow (local evm, chain id 84532)", () => {
+  it("stake limits are set at deploy and readable onchain", async () => {
+    expect([await read("minStake", []), await read("maxStake", [])]).toEqual([MIN_UNITS, MAX_UNITS]);
+  });
+
+  it("custom decimal stakes above 25: both deposits match the stake exactly and the winner gets the whole pot", async () => {
+    const [e0, a0] = [await balanceUnits(escrow), await balanceUnits(alice)];
+    await sendCalls(alice, create("c1", 35.5, 2));
+    await sendCalls(bob, await join("c1", 35.5, bob));
+    const [stake, , deposits, , , status] = await read("getDuel", [duelIdToBytes32("c1")]);
+    expect([stake, Number(deposits), Number(status)]).toEqual([35_500_000n, 2, 2]);
+    expect(await balanceUnits(escrow) - e0).toBe(71_000_000n); // prize pool = 35.50 + 35.50
+    await settleSigned("c1", [alice], carol);
+    expect(await balanceUnits(alice) - a0).toBe(35_500_000n); // paid 35.50, got 71.00 back
+    expect(await balanceUnits(escrow)).toBe(e0);
+  });
+
+  it("a draw on a custom stake refunds each deposit exactly", async () => {
+    await sendCalls(alice, create("c2", 150.25, 2));
+    await sendCalls(bob, await join("c2", 150.25, bob));
+    const [a0, b0] = [await balanceUnits(alice), await balanceUnits(bob)];
+    await settleSigned("c2", [], carol);
+    expect([await balanceUnits(alice) - a0, await balanceUnits(bob) - b0]).toEqual([150_250_000n, 150_250_000n]);
+  });
+
   it("server-side digests match the contract exactly", async () => {
     await sendCalls(alice, create("dg", 1, 2));
     const k = duelIdToBytes32("dg");
@@ -106,7 +134,9 @@ describe("BeefEscrow (local evm, chain id 84532)", () => {
   });
 
   it("rejects bad creates", async () => {
-    await expectRevert(sendCalls(alice, create("d3", 30, 2))); // above max stake
+    await expectRevert(sendCalls(alice, create("d3", 1000.01, 2))); // above max stake
+    await clearAllowance(alice);
+    await expectRevert(sendCalls(alice, create("d3b", 0.99, 2))); // below min stake
     await clearAllowance(alice);
     await expectRevert(sendCalls(alice, buildCreateDuelCalls({ usdc, escrow, duelId: "d4", stake: 5, participants: [bob, OPEN_SLOT], termsHash: keccak256("0x01") }))); // creator not in it
     await clearAllowance(alice);

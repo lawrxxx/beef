@@ -1,7 +1,9 @@
 import "server-only";
 import { NextResponse } from "next/server";
 import { createPublicClient, http, keccak256, toHex, type Hex } from "viem";
-import { CHAIN } from "@/lib/chain/config";
+import { resolveDuelEscrow } from "@/lib/wallet/escrow-resolve";
+import { BEEF_ESCROW_ABI } from "@/lib/wallet/escrow-abi";
+import { CHAIN, ESCROW_ADDRESS } from "@/lib/chain/config";
 import { getAdminSupabase, getServerSupabase } from "@/lib/supabase/server";
 import { SupabaseWalletRepo, type WalletRepo } from "./wallet-repo";
 import { verifyWithCdp, type EndUserVerifier, type VerifiedEndUser } from "./cdp";
@@ -59,6 +61,21 @@ export async function forwardToCdpPaymaster(body: unknown): Promise<unknown> {
 }
 
 const publicClient = createPublicClient({ chain: CHAIN, transport: http(process.env.BASE_SEPOLIA_RPC_URL || undefined) });
+
+/** the escrow that already holds a duel on base sepolia (or the current one for new duels) */
+export const resolveEscrow = (duelId: string) => resolveDuelEscrow(publicClient, duelId);
+
+/** the deployed escrow's stake limits, read from base sepolia */
+export async function escrowLimits() {
+  if (!ESCROW_ADDRESS) return null;
+  try {
+    const [min, max] = await Promise.all([
+      publicClient.readContract({ address: ESCROW_ADDRESS, abi: BEEF_ESCROW_ABI, functionName: "minStake" }),
+      publicClient.readContract({ address: ESCROW_ADDRESS, abi: BEEF_ESCROW_ABI, functionName: "maxStake" }),
+    ]);
+    return { min: min as bigint, max: max as bigint };
+  } catch { return null; } // an escrow without configurable limits (the old fixed-25 contract)
+}
 
 export async function getReceipt(txHash: Hex) {
   try { return await publicClient.getTransactionReceipt({ hash: txHash }); } catch { return null; }

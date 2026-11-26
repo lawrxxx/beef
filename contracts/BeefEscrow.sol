@@ -24,12 +24,13 @@ contract BeefEscrow {
         Status status;
     }
 
-    uint256 public constant MAX_STAKE = 25e6;      // 25 test usdc
     uint256 public constant MAX_PARTICIPANTS = 6;
     uint64 public constant FUNDING_WINDOW = 2 days;
 
     IERC20 public immutable usdc;
     address public immutable oracle; // beef settlement service signer
+    uint256 public immutable minStake; // per participant, usdc base units (6 decimals)
+    uint256 public immutable maxStake;
 
     mapping(bytes32 => Duel) private duels;
     mapping(bytes32 => mapping(address => bool)) public deposited;
@@ -46,10 +47,13 @@ contract BeefEscrow {
     error BadParams();
     error BadSignature();
 
-    constructor(IERC20 _usdc, address _oracle) {
+    constructor(IERC20 _usdc, address _oracle, uint256 _minStake, uint256 _maxStake) {
         if (address(_usdc) == address(0) || _oracle == address(0)) revert BadParams();
+        if (_minStake == 0 || _maxStake < _minStake) revert BadParams();
         usdc = _usdc;
         oracle = _oracle;
+        minStake = _minStake;
+        maxStake = _maxStake;
     }
 
     /// creator registers the duel and pays their stake in the same call.
@@ -58,7 +62,7 @@ contract BeefEscrow {
     function createDuel(bytes32 duelId, uint256 stake, address[] calldata participants, bytes32 termsHash) external {
         Duel storage d = duels[duelId];
         if (d.status != Status.None) revert BadState();
-        if (stake == 0 || stake > MAX_STAKE) revert BadParams();
+        if (stake < minStake || stake > maxStake) revert BadParams();
         uint256 n = participants.length;
         if (n < 2 || n > MAX_PARTICIPANTS) revert BadParams();
         bool creatorIn;

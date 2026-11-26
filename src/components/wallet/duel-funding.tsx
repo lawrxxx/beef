@@ -6,6 +6,8 @@ import type { Hex } from "viem";
 import { AlertTriangle, CheckCircle2, Loader2, Lock, Sparkles } from "lucide-react";
 import type { Duel } from "@/lib/types";
 import { ESCROW_ADDRESS, NETWORK_NAME, shortAddress, txUrl } from "@/lib/chain/config";
+import { fmtStake, formatUsdc, prizePoolUnits, stakeUnits } from "@/lib/stake";
+import { resolveDuelEscrow } from "@/lib/wallet/escrow-resolve";
 import { BEEF_ESCROW_ABI } from "@/lib/wallet/escrow-abi";
 import { duelIdToBytes32 } from "@/lib/wallet/calls";
 import { marketTime } from "@/lib/format";
@@ -17,26 +19,29 @@ import { WalletConnect } from "./wallet-panel";
 
 const ESCROW_STATUS = ["not opened yet", "waiting for opponents", "all stakes locked", "paid out", "refunded"] as const;
 type Action = "create" | "accept" | "refund" | "settle";
-interface Chain { status: number; deposits: number; participants: number; fundingDeadline: number; mine: boolean }
+interface Chain { status: number; stake: bigint; deposits: number; participants: number; fundingDeadline: number; mine: boolean }
 
 /** the escrow contract is the source of truth for stakes */
 function useEscrow(duelId: string, account: string | null, nonce: number) {
   const [state, setState] = useState<Chain | null>(null);
+  const [escrow, setEscrow] = useState<`0x${string}` | null>(null);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     if (!ESCROW_ADDRESS) return;
     let alive = true;
     (async () => {
       try {
+        // older duels may live on a previous escrow; new ones open on the current one
+        const at = (await resolveDuelEscrow(publicClient, duelId)) ?? ESCROW_ADDRESS!;
         const key = duelIdToBytes32(duelId);
-        const [, participants, deposits, , fundingDeadline, status] = await publicClient.readContract({ address: ESCROW_ADDRESS!, abi: BEEF_ESCROW_ABI, functionName: "getDuel", args: [key] });
-        const mine = account ? await publicClient.readContract({ address: ESCROW_ADDRESS!, abi: BEEF_ESCROW_ABI, functionName: "deposited", args: [key, account as `0x${string}`] }) : false;
-        if (alive) { setState({ status: Number(status), deposits: Number(deposits), participants: participants.length, fundingDeadline: Number(fundingDeadline), mine: Boolean(mine) }); setError(null); }
+        const [stake, participants, deposits, , fundingDeadline, status] = await publicClient.readContract({ address: at, abi: BEEF_ESCROW_ABI, functionName: "getDuel", args: [key] });
+        const mine = account ? await publicClient.readContract({ address: at, abi: BEEF_ESCROW_ABI, functionName: "deposited", args: [key, account as `0x${string}`] }) : false;
+        if (alive) { setEscrow(at); setState({ status: Number(status), stake, deposits: Number(deposits), participants: participants.length, fundingDeadline: Number(fundingDeadline), mine: Boolean(mine) }); setError(null); }
       } catch { if (alive) setError("couldn't read the escrow on base sepolia"); }
     })();
     return () => { alive = false; };
   }, [duelId, account, nonce]);
-  return { state, error };
+  return { state, escrow, error };
 }
 
 function Inner({ d }: { d: Duel }) {
@@ -44,7 +49,7 @@ function Inner({ d }: { d: Duel }) {
   const w = useBeefWallet();
   const meId = s.session.userId!;
   const [nonce, setNonce] = useState(0);
-  const { state, error } = useEscrow(d.id, w.smartAccount, nonce);
+  const { state, escrow, error } = useEscrow(d.id, w.smartAccount, nonce);
   const [open, setOpen] = useState(false);
   const [agree, setAgree] = useState(false);
   const [phase, setPhase] = useState<"idle" | "sending" | "confirming" | "done" | "error">("idle");
@@ -81,10 +86,16 @@ function Inner({ d }: { d: Duel }) {
         : chain === 1 && canJoin && d.status === "pending" ? "accept"
           : chain === 2 && d.status === "completed" && d.settlement && d.settlement.status !== "needs_verification" ? "settle" : null;
   const moves = action === "create" || action === "accept";
-  const short = moves && (w.balance.available ?? 0) < d.stake;
+  const stakeU = stakeUnits(d.stake);
+  const stake = fmtStake(d.stake);
+  const balanceU = w.balance.units;
+  const short = moves && balanceU != null && balanceU < stakeU;
+  const unknownBalance = moves && balanceU == null;
+  // the escrow is the source of truth: once the duel is onchain, the amount shown must be the amount it holds
+  const mismatch = !!state && state.status !== 0 && state.stake !== stakeU;
   const opponents = d.participants.filter((p) => p.userId !== meId).map((p) => (p.userId ? `@${s.users.find((u) => u.id === p.userId)?.username}` : "open spot"));
   const myTicker = myRow?.ticker ?? d.participants.find((p) => !p.userId)?.ticker;
-  const pot = d.stake * d.participants.length;
+  const pot = formatUsdc(prizePoolUnits(stakeU, d.participants.length));
 
   const go = async () => {
     if (!action) return;
@@ -102,8 +113,8 @@ function Inner({ d }: { d: Duel }) {
   };
 
   const label: Record<Action, string> = {
-    create: `lock ${d.stake} test usdc and send`,
-    accept: `accept and lock ${d.stake} test usdc`,
+    create: `lock ${stake} test usdc and send`,
+    accept: `accept and lock ${stake} test usdc`,
     refund: "get my stake back",
     settle: "release the payout",
   };
@@ -129,7 +140,7 @@ function Inner({ d }: { d: Duel }) {
           <button className="btn-primary btn-sm mt-3" disabled={phase === "sending" || !!pending} onClick={() => { setAgree(false); setMsg(null); if (phase === "error") setPhase("idle"); setOpen(true); }}>
             {pending || phase === "confirming" ? <><Loader2 size={15} className="animate-spin" /> confirming on base sepolia…</> : label[action]}
           </button>
-          {short && <p className="mt-2 text-xs text-gold">you have {(w.balance.available ?? 0).toFixed(2)} test usdc and need {d.stake}. gas is free, usdc isn't. <Link href="/wallet" className="underline">get test usdc</Link></p>}
+          {short && <p className="mt-2 text-xs text-gold">you have {formatUsdc(balanceU!)} test usdc and need {stake}: {formatUsdc(stakeU - balanceU!)} more. gas is free, usdc isn't. <Link href="/wallet" className="underline">get test usdc</Link></p>}
         </>
       ) : chain === 1 && !canJoin && !state?.mine && !isCreator ? (
         <p className="mt-2 text-xs text-muted">this duel is waiting for its invited players.</p>
@@ -147,30 +158,32 @@ function Inner({ d }: { d: Duel }) {
             ["result", d.settlement?.status === "draw" ? "draw: every stake goes back" : `the pot (${pot} test usdc) goes to the winner`],
             ["based on", "beef's verified result, signed by its settlement service"],
           ] : action === "refund" ? [
-            ["amount", `${d.stake} test usdc back to your wallet`],
+            ["amount", `${stake} test usdc back to your wallet`],
             ["why", "the duel didn't fill before the 2-day funding window closed"],
           ] : [
             ["against", opponents.join(", ")],
             ["your stock", myTicker ?? "—"],
-            ["your stake", `${d.stake} test usdc`],
+            ["your stake", `${stake} test usdc`],
             ["prize pool", `${pot} test usdc`],
             ["deadline", marketTime(d.deadline)],
             ["network", `${NETWORK_NAME} (testnet)`],
             ["token", "usdc by circle (test)"],
-            ["held by", `beef escrow ${shortAddress(ESCROW_ADDRESS)}`],
+            ["held by", `beef escrow ${shortAddress(escrow ?? ESCROW_ADDRESS)}`],
             ["fees", "none · gas covered by beef"],
           ]).map(([k, v]) => <div key={k} className="flex justify-between gap-4 px-4 py-2.5"><span className="shrink-0 text-muted">{k}</span><span className="text-right font-medium">{v}</span></div>)}
         </div>
         {moves && (
           <label className="mt-3 flex items-start gap-3 text-sm text-ink-soft">
             <input type="checkbox" className="mt-0.5 h-5 w-5 accent-[#1D1D1F]" checked={agree} onChange={(e) => setAgree(e.target.checked)} />
-            <span>i authorise the beef escrow to take exactly {d.stake} test usdc from my wallet for this duel. it's a one-time approval for this amount only.</span>
+            <span>i authorise the beef escrow to take exactly {stake} test usdc from my wallet for this duel. it's a one-time approval for this amount only.</span>
           </label>
         )}
-        {short && <p className="mt-2 text-sm text-loss">not enough test usdc: you have {(w.balance.available ?? 0).toFixed(2)}.</p>}
+        {short && <p className="mt-2 text-sm text-loss">not enough test usdc: you have {formatUsdc(balanceU!)} and need {formatUsdc(stakeU - balanceU!)} more.</p>}
+        {unknownBalance && <p className="mt-2 text-sm text-muted">checking your balance on base sepolia…</p>}
+        {mismatch && <p className="mt-2 text-sm text-loss">the escrow holds a different stake ({formatUsdc(state!.stake)}) than this duel shows. nothing will be sent.</p>}
         {phase === "error" && msg && <p role="alert" className="mt-3 flex items-start gap-1.5 rounded-xl bg-loss/10 p-3 text-sm text-loss"><AlertTriangle size={15} className="mt-0.5 shrink-0" /><span className="break-words">{msg}</span></p>}
         <p className="mt-3 flex items-center gap-1.5 text-xs text-muted"><Sparkles size={12} className="text-gold" /> test usdc has no monetary value.</p>
-        <button className="btn-primary mt-4 w-full" disabled={(moves && (!agree || short)) || phase === "sending"} onClick={go}>
+        <button className="btn-primary mt-4 w-full" disabled={(moves && (!agree || short || unknownBalance)) || mismatch || phase === "sending"} onClick={go}>
           {phase === "sending" ? <><Loader2 size={16} className="animate-spin" /> sending…</> : "confirm"}
         </button>
       </Sheet>
