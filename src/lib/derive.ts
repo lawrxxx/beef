@@ -5,7 +5,7 @@ import { dailyMatchup } from "@/lib/daily";
 
 export const STATUS_LABEL: Record<DuelStatus, string> = {
   pending: "waiting for opponent",
-  accepted: "locks at the close",
+  accepted: "locks at the open",
   active: "live",
   awaiting_verification: "verifying prices",
   completed: "settled",

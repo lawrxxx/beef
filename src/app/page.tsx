@@ -38,7 +38,7 @@ function StartBeefCard({ signedIn }: { signedIn: boolean }) {
         <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-brand text-white"><Swords size={22} /></span>
         <div className="min-w-0 flex-1">
           <p className="font-semibold">think your stock beats theirs?</p>
-          <p className="text-[13px] text-muted">pick two stocks, set a stake, settle it at the close.</p>
+          <p className="text-[13px] text-muted">pick two stocks, set a stake, let the market decide.</p>
         </div>
       </div>
       <Link href={signedIn ? "/duel/new" : "/auth/sign-in"} className="btn-primary mt-3 w-full">start a beef</Link>

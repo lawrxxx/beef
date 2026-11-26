@@ -87,7 +87,7 @@ function DuelView({ d }: { d: Duel }) {
         )}
         {live && leader && (
           <div className="bg-gain-soft px-4 py-2.5 text-center text-sm font-semibold text-gain">
-            {usersMap[leader.userId]?.displayName ?? "?"} is leading with {leader.ticker} <span className="font-normal text-gain/80">· not final until the deadline close</span>
+            {usersMap[leader.userId]?.displayName ?? "?"} is leading with {leader.ticker} <span className="font-normal text-gain/80">· not final until the deadline</span>
           </div>
         )}
         <div className={cx("grid gap-3 p-5", group ? "grid-cols-2" : "grid-cols-[1fr_auto_1fr] items-start")}>
@@ -289,8 +289,8 @@ function DuelView({ d }: { d: Duel }) {
 function SETTLEMENT_LABEL(d: Duel): string {
   switch (d.status) {
     case "pending": return d.escrowState === "unfunded" ? "waiting for the creator's stake" : "waiting for opponents to lock their stakes";
-    case "accepted": return "terms locked · prices lock at the close";
-    case "active": return "pending · settles at the deadline close";
+    case "accepted": return "terms locked · prices lock at the market open";
+    case "active": return "pending · settles at the deadline";
     case "awaiting_verification": return "paused · waiting for verified prices";
     case "completed": return d.escrowState === "settled" ? (d.settlement?.status === "draw" ? "settled · draw, stakes returned onchain" : "settled · paid out onchain") : "result final · payout ready to release";
     case "cancelled": return d.escrowState === "funded" ? "cancelled · creator can reclaim the stake after the funding window" : d.escrowState === "refunded" ? "cancelled · stake refunded" : "cancelled · nothing was staked";

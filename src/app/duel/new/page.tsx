@@ -386,7 +386,7 @@ function NewDuelInner() {
               ["prize pool", `${potLabel} test usdc · winner takes all`],
               ["starts", `the next market open after acceptance (if accepted now: ${etLabel(startIfNow)})`],
               ["deadline", expiration === "custom" && deadline ? `${etLabel(new Date(deadline.deadline))} · your time ${localLabel(new Date(deadline.deadline))}` : `${EXPIRATION_COPY[expiration].label} (if accepted now: ${deadline ? etLabel(new Date(deadline.deadline)) : "—"})`],
-              ["prices lock", "first official close after everyone's in"],
+              ["prices lock", "first chainlink feed update at or after the start"],
               ["network", "base sepolia (testnet)"],
               ["token", "usdc by circle (test, no monetary value)"],
               ["fees", "none · gas covered by beef"],
