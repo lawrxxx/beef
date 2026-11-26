@@ -23,18 +23,18 @@ export default function NotificationsPage() {
       <PageHeader title="notifications" subtitle={unread ? `${unread} unread` : "you're all caught up"} action={unread ? <button className="btn-outline btn-sm" onClick={markAllRead}><Check size={15} /> mark all read</button> : undefined} />
       <Tabs value={tab} onChange={setTab} options={[{ value: "all", label: "all" }, { value: "unread", label: "unread" }]} className="mb-4" />
       {list.length === 0 ? <EmptyState icon={<Bell size={22} />} title="nothing new" body="invites, results and replies will show up here." /> : (
-        <ul className="card divide-y overflow-hidden">
+        <ul className="divide-y divide-line border-y-2 border-ink">
           {list.map((n) => {
             const actor = n.actorId ? userById(s, n.actorId) : undefined;
             return (
               <li key={n.id}>
                 <Link href={n.href} onClick={() => markRead(n.id)} className={cx("flex items-start gap-3 px-4 py-3.5 hover:bg-ink/[.02]", !n.read && "bg-brand-soft/40")}>
                   <div className="relative">
-                    {actor ? <Avatar user={actor} size={40} /> : <span className="flex h-10 w-10 items-center justify-center rounded-full bg-ink/[.05] text-lg">{ICON[n.kind]}</span>}
+                    {actor ? <Avatar user={actor} size={40} /> : <span className="flex h-10 w-10 items-center justify-center border-2 border-ink text-lg">{ICON[n.kind]}</span>}
                     {actor && <span className="absolute -bottom-1 -right-1 text-sm">{ICON[n.kind]}</span>}
                   </div>
                   <p className="min-w-0 flex-1 text-[15px] leading-snug">{actor && <b>{actor.displayName} </b>}{n.text}<span className="block text-[13px] text-muted">{timeAgo(n.createdAt)}</span></p>
-                  {!n.read && <span className="mt-2 h-2.5 w-2.5 shrink-0 rounded-full bg-brand" aria-label="unread" />}
+                  {!n.read && <span className="mt-2 h-2.5 w-2.5 shrink-0 bg-brand" aria-label="unread" />}
                 </Link>
               </li>
             );

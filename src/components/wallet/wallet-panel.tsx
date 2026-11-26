@@ -162,33 +162,35 @@ export function FundWallet({ compact }: { compact?: boolean }) {
 export function Balances() {
   const w = useBeefWallet();
   return (
-    <div className="card overflow-hidden">
-      <div className="flex items-center justify-between border-b px-4 py-3">
-        <span className="flex items-center gap-2 text-sm font-semibold"><span className="h-2 w-2 rounded-full bg-gain" /> wallet connected</span>
-        <span className="text-[11px] font-semibold uppercase tracking-[.08em] text-muted">{NETWORK_NAME} · testnet</span>
+    <div className="border-y-2 border-ink">
+      <div className="meta flex items-center justify-between border-b border-line py-2">
+        <span className="flex items-center gap-2 font-bold"><span className="h-1.5 w-1.5 bg-gain" /> wallet connected</span>
+        <span className="text-muted">{NETWORK_NAME} · testnet</span>
       </div>
-      <div className="grid grid-cols-3 divide-x text-center">
+      <div className="py-4">
+        <p className="meta text-muted">available</p>
+        <p className="num mt-1 text-[48px] font-bold leading-none tracking-[-0.04em]">{w.balance.units == null ? (w.balance.loading ? "…" : "—") : formatUsdc(w.balance.units)}<span className="meta ml-2 font-normal tracking-normal text-muted">test usdc</span></p>
+      </div>
+      <div className="grid grid-cols-2 border-t border-line">
         {[
-          ["available", w.balance.units],
           ["in duels", w.balance.units == null ? null : w.balance.lockedUnits],
           ["total", w.balance.totalUnits],
-        ].map(([k, v]) => (
-          <div key={k as string} className="px-2 py-3.5">
-            <p className="text-[10.5px] font-semibold uppercase tracking-[.12em] text-muted">{k}</p>
-            <p className="num display-cond mt-1 text-[28px] font-bold leading-none">{v == null ? (w.balance.loading ? "…" : "—") : formatUsdc(v as bigint)}</p>
-            <p className="text-[10px] text-muted">test usdc</p>
+        ].map(([k, v], i) => (
+          <div key={k as string} className={cx("py-2.5", i > 0 && "border-l border-line pl-3")}>
+            <p className="meta text-muted">{k as string}</p>
+            <p className="num mt-0.5 text-[17px] font-bold">{v == null ? (w.balance.loading ? "…" : "—") : formatUsdc(v as bigint)}</p>
           </div>
         ))}
       </div>
-      {w.balance.error && <p className="border-t px-4 py-2 text-xs text-loss">{w.balance.error}</p>}
-      <div className="flex items-center justify-between border-t px-4 py-2.5 text-[13px]">
+      {w.balance.error && <p className="border-t border-line py-2 text-xs text-loss">{w.balance.error}</p>}
+      <div className="flex items-center justify-between border-t border-line py-2.5 text-[13px]">
         {w.link.status === "linking" && <span className="flex items-center gap-1.5 text-muted"><Loader2 size={13} className="animate-spin" /> verifying your wallet…</span>}
         {w.link.status === "linked" && <span className="flex items-center gap-1.5 text-gain"><ShieldCheck size={14} /> verified and linked to your beef account</span>}
         {w.link.status === "error" && <span className="text-loss">{w.link.message} <button className="underline" onClick={() => void w.relink()}>retry</button></span>}
         {w.link.status === "idle" && <span />}
         <span className="flex items-center gap-1 text-muted"><Sparkles size={12} className="text-gold" /> gas covered</span>
       </div>
-      <p className="border-t px-4 py-2 text-[11px] text-muted">read from base sepolia{w.balance.at ? ` · updated ${timeAgo(new Date(w.balance.at).toISOString())}` : ""}. stakes in duels are held by the beef escrow contract.</p>
+      <p className="border-t border-line py-2 text-[11px] text-muted">read from base sepolia{w.balance.at ? ` · updated ${timeAgo(new Date(w.balance.at).toISOString())}` : ""}. stakes in duels are held by the beef escrow contract.</p>
     </div>
   );
 }

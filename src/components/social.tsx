@@ -41,12 +41,12 @@ export function ReactionBar({ targetType, targetId }: { targetType: "post" | "du
               run(() => toggleReaction(targetType, targetId, r.kind));
             }}
             className={cx(
-              "inline-flex h-8 min-w-8 items-center justify-center gap-1 rounded-md px-1.5 text-[13px] transition active:scale-95",
+              "inline-flex h-8 min-w-8 items-center justify-center gap-1 px-1.5 text-[13px] transition active:scale-95",
               mine === r.kind ? "bg-ink/[.08] font-semibold" : "opacity-80 grayscale-[.35] hover:bg-ink/[.05] hover:opacity-100 hover:grayscale-0",
             )}
           >
             <span aria-hidden>{r.emoji}</span>
-            {n > 0 && <span className="num text-ink-soft">{n}</span>}
+            {n > 0 && <span className="num text-[12px] font-bold text-ink-soft">{n}</span>}
           </button>
         );
       })}
@@ -132,57 +132,59 @@ export function PostCard({ post }: { post: Post }) {
   });
 
   return (
-    <article className="animate-fade-up border-b border-line py-4">
-      <header className="flex items-start gap-3">
-        <Link href={author ? `/u/${author.username}` : "#"}><Avatar user={author} size={40} /></Link>
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-[15px]">
-            <UserLink user={author} /> <span className="text-muted">@{author?.username} · <Ago iso={post.createdAt} /></span>
-          </p>
-          {community && <Link href={`/communities/${community.slug}`} className="text-[13px] text-muted hover:underline">{community.emoji} {community.name}</Link>}
-        </div>
-        {post.kind === "result" && <span className="kicker !text-gold">result</span>}
-        {post.kind === "opinion" && <span className="kicker">prediction</span>}
-      </header>
+    <article className="grid animate-fade-up grid-cols-[46px_1fr] gap-x-2 border-b border-line py-4">
+      {/* the timeline gutter: when, in mono */}
+      <div className="flex flex-col items-start gap-2 pt-0.5">
+        <Link href={author ? `/u/${author.username}` : "#"}><Avatar user={author} size={34} /></Link>
+        <span className="meta text-muted"><Ago iso={post.createdAt} /></span>
+      </div>
+      <div className="min-w-0">
+        <header className="flex items-baseline gap-2">
+          <p className="min-w-0 truncate text-[15px]"><UserLink user={author} className="font-bold" /> <span className="text-muted">@{author?.username}</span></p>
+          {post.kind === "result" && <span className="meta ml-auto shrink-0 bg-ink px-1.5 font-bold text-inverse">final</span>}
+          {post.kind === "opinion" && <span className="meta ml-auto shrink-0 bg-brand px-1.5 font-bold text-[rgb(18_17_16)]">call</span>}
+        </header>
+        {community && <Link href={`/communities/${community.slug}`} className="meta text-muted hover:underline">{community.emoji} {community.name}</Link>}
 
-      <Link href={`/post/${post.id}`} className="mt-2 block whitespace-pre-wrap break-words text-[16px] leading-[1.5] text-ink">{body}</Link>
+        <Link href={`/post/${post.id}`} className="mt-1.5 block whitespace-pre-wrap break-words text-[16px] leading-[1.45] text-ink">{body}</Link>
 
-      {post.prediction && (
-        <div className="mt-3 flex items-center justify-between gap-3 border-l-[3px] border-brand py-1 pl-3">
-          <div className="flex flex-wrap items-baseline gap-x-2 text-sm">
-            <Link href={`/stock/${post.prediction.pick}`} className="display-cond text-[24px] font-bold leading-none">{post.prediction.pick}</Link>
-            <span className="font-display italic text-muted">beats</span>
-            <Link href={`/stock/${post.prediction.versus}`} className="display-cond text-[24px] font-bold leading-none text-ink-soft">{post.prediction.versus}</Link>
-            <span className="text-[13px] text-muted">· {post.prediction.horizon}</span>
+        {post.prediction && (
+          <div className="mt-3 border-y-2 border-ink py-2">
+            <div className="flex flex-wrap items-end gap-x-3 gap-y-1">
+              <Link href={`/stock/${post.prediction.pick}`} className="cond text-[40px] leading-[.8]">{post.prediction.pick}</Link>
+              <span className="cond text-[30px] leading-[.8] text-brand">&gt;</span>
+              <Link href={`/stock/${post.prediction.versus}`} className="cond text-[40px] leading-[.8] text-muted">{post.prediction.versus}</Link>
+              <span className="meta mb-0.5 text-muted">{post.prediction.horizon}</span>
+            </div>
+            {!isMine && (
+              <button
+                className="btn-primary btn-sm mt-2.5"
+                onClick={() => router.push(`/duel/new?mine=${post.prediction!.versus}&theirs=${post.prediction!.pick}&vs=${post.authorId}`)}
+              >
+                <Swords size={15} /> take the other side
+              </button>
+            )}
           </div>
-          {!isMine && (
-            <button
-              className="btn-primary btn-sm shrink-0"
-              onClick={() => router.push(`/duel/new?mine=${post.prediction!.versus}&theirs=${post.prediction!.pick}&vs=${post.authorId}`)}
-            >
-              <Swords size={15} /> challenge
+        )}
+
+        {duel && <div className="mt-3"><DuelCard d={duel} compact /></div>}
+
+        {post.tickers.length > 0 && !post.prediction && (
+          <div className="mt-2 flex flex-wrap gap-3">{post.tickers.slice(0, 4).map((t) => <TickerTag key={t} t={t} />)}</div>
+        )}
+
+        <footer className="mt-2 flex items-center justify-between gap-2">
+          <ReactionBar targetType="post" targetId={post.id} />
+          <div className="flex shrink-0 items-center">
+            <Link href={`/post/${post.id}#comments`} className="btn-ghost btn-sm !min-h-8 !px-2 text-muted" aria-label={`${comments} comments`}>
+              <MessageCircle size={16} /> <span className="num text-[12px]">{comments || ""}</span>
+            </Link>
+            <button className="btn-ghost btn-sm !min-h-8 !px-2 text-muted" aria-label="share" onClick={() => shareLink(`/post/${post.id}`, `${author?.displayName ?? "someone"} on beef: “${post.body.slice(0, 80)}”`)}>
+              <Share2 size={16} />
             </button>
-          )}
-        </div>
-      )}
-
-      {duel && <div className="mt-3"><DuelCard d={duel} compact /></div>}
-
-      {post.tickers.length > 0 && !post.prediction && (
-        <div className="mt-3 flex flex-wrap gap-1.5">{post.tickers.slice(0, 4).map((t) => <TickerTag key={t} t={t} />)}</div>
-      )}
-
-      <footer className="mt-3 flex items-center justify-between gap-2">
-        <ReactionBar targetType="post" targetId={post.id} />
-        <div className="flex shrink-0 items-center">
-          <Link href={`/post/${post.id}#comments`} className="btn-ghost btn-sm !px-2.5 text-muted" aria-label={`${comments} comments`}>
-            <MessageCircle size={17} /> <span className="num text-[13px]">{comments || ""}</span>
-          </Link>
-          <button className="btn-ghost btn-sm !px-2.5 text-muted" aria-label="share" onClick={() => shareLink(`/post/${post.id}`, `${author?.displayName ?? "someone"} on beef: “${post.body.slice(0, 80)}”`)}>
-            <Share2 size={17} />
-          </button>
-        </div>
-      </footer>
+          </div>
+        </footer>
+      </div>
     </article>
   );
 }
@@ -194,10 +196,10 @@ export function UserRow({ userId, sub }: { userId: string; sub?: string }) {
   return (
     <div className="flex items-center gap-3 py-2.5">
       <Link href={`/u/${u.username}`} className="flex min-w-0 flex-1 items-center gap-3">
-        <Avatar user={u} size={40} />
+        <Avatar user={u} size={38} />
         <div className="min-w-0">
-          <p className="truncate text-[15px] font-semibold">{u.displayName}</p>
-          <p className="truncate text-[13px] text-muted">{sub ?? `@${u.username}`}</p>
+          <p className="truncate text-[15px] font-bold">{u.displayName}</p>
+          <p className="meta truncate text-muted">{sub ?? `@${u.username}`}</p>
         </div>
       </Link>
       <FollowButton userId={u.id} small />

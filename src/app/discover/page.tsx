@@ -6,10 +6,11 @@ import { Search, X } from "lucide-react";
 import { useBeef } from "@/lib/store/store";
 import { ASSETS } from "@/lib/market/assets";
 import { statsFor, useMounted } from "@/lib/hooks";
-import { PageHeader, Section, SourceBadge, Tabs } from "@/components/ui";
+import { Avatar, Section, SourceBadge, Tabs } from "@/components/ui";
+import { cx } from "@/lib/format";
 import { DuelCard } from "@/components/duel-card";
 import { PostCard, UserRow } from "@/components/social";
-import { TrendingList } from "@/components/right-rail";
+import { StockGrid } from "@/components/right-rail";
 import { DailyBeefCard } from "@/components/daily-beef";
 import { CommunityList } from "@/components/community-list";
 
@@ -36,6 +37,22 @@ export default function DiscoverPage() {
     () => s.users.filter((u) => u.id !== s.session.userId).map((u) => ({ u, followers: s.follows.filter((f) => f.followeeId === u.id).length, score: statsFor(s, u.id).score })).sort((a, b) => b.score - a.score).slice(0, 5),
     [s],
   );
+  const rivalries = useMemo(() => {
+    const m = new Map<string, { key: string; a: string; b: string; wa: number; wb: number; total: number; last: string }>();
+    for (const d of s.duels) {
+      if (d.status !== "completed" || !d.settlement || d.participants.length !== 2) continue;
+      const [x, y] = d.participants.map((p) => p.userId).sort();
+      if (!x || !y) continue;
+      const k = `${x}:${y}`;
+      const r = m.get(k) ?? { key: k, a: x, b: y, wa: 0, wb: 0, total: 0, last: "" };
+      r.total++;
+      if (d.settlement.status !== "draw") { if (d.settlement.winners.includes(x)) r.wa++; else if (d.settlement.winners.includes(y)) r.wb++; }
+      if (d.settlement.settledAt > r.last) r.last = d.settlement.settledAt;
+      m.set(k, r);
+    }
+    return [...m.values()].sort((p, q) => q.total - p.total || q.last.localeCompare(p.last)).slice(0, 4)
+      .map((r) => ({ ...r, a: s.users.find((u) => u.id === r.a)!, b: s.users.find((u) => u.id === r.b)! })).filter((r) => r.a && r.b);
+  }, [s.duels, s.users]);
   const hotPosts = useMemo(() => {
     const score = (id: string) => s.reactions.filter((r) => r.targetId === id).length + 2 * s.comments.filter((c) => c.targetId === id).length;
     return [...s.posts].sort((a, b) => score(b.id) - score(a.id)).slice(0, 3);
@@ -46,11 +63,11 @@ export default function DiscoverPage() {
 
   return (
     <div>
-      <PageHeader title="discover" subtitle="find your next beef" />
-      <div className="relative mb-3">
-        <Search size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-faint" />
-        <input className="input !pl-10 !pr-10" placeholder="search people, $tickers, duels, communities" value={q} onChange={(e) => setQ(e.target.value)} aria-label="search" />
-        {q && <button className="absolute right-2 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-md hover:bg-ink/[.06]" onClick={() => setQ("")} aria-label="clear search"><X size={16} /></button>}
+      <h1 className="cond text-[56px] leading-[.82]">find your<br />next beef.</h1>
+      <div className="relative mb-4 mt-4">
+        <Search size={20} className="absolute left-0 top-1/2 -translate-y-1/2 text-ink" />
+        <input className="input !border-b-[3px] !pl-8 !pr-10 !text-[19px] font-semibold" placeholder="people, $tickers, duels, communities" value={q} onChange={(e) => setQ(e.target.value)} aria-label="search" />
+        {q && <button className="absolute right-0 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center hover:bg-ink/[.07]" onClick={() => setQ("")} aria-label="clear search"><X size={18} /></button>}
       </div>
       <Tabs<Filter> value={filter} onChange={setFilter} className="mb-5" options={[{ value: "all", label: "all" }, { value: "people", label: "people" }, { value: "stocks", label: "stocks" }, { value: "duels", label: "duels" }, { value: "communities", label: "communities" }]} />
 
@@ -70,20 +87,50 @@ export default function DiscoverPage() {
         </div>
       ) : (
         <div>
-          {filter === "all" && <div className="mb-6 xl:hidden"><DailyBeefCard /></div>}
-          {show("stocks") && <Section title="trending stocks" action={<SourceBadge />}><TrendingList limit={filter === "stocks" ? 10 : 5} /></Section>}
-          {show("duels") && (
-            <Section title="public duels" action={<Link href="/duel?tab=open" className="text-sm font-semibold text-brand-dark">see all</Link>}>
-              <div className="grid gap-3 sm:grid-cols-2">{publicDuels.map((d) => <DuelCard key={d.id} d={d} compact />)}</div>
+          {show("people") && rivalries.length > 0 && (
+            <Section title="rivalries heating up">
+              <div className="divide-y divide-line border-b border-line">
+                {rivalries.map((r) => (
+                  <Link key={r.key} href={`/rivalry/${r.b.username}?a=${r.a.username}`} className="grid grid-cols-[auto_1fr_auto] items-center gap-3 py-2.5 hover:bg-ink/[.05]">
+                    <span className="flex"><Avatar user={r.a} size={30} /><span className="-ml-1.5 ring-2 ring-bg"><Avatar user={r.b} size={30} /></span></span>
+                    <span className="min-w-0 truncate"><b>{r.a.displayName.split(" ")[0]}</b> <span className="serif text-muted">vs</span> <b>{r.b.displayName.split(" ")[0]}</b> <span className="meta text-muted">· {r.total} {r.total === 1 ? "duel" : "duels"}</span></span>
+                    <span className="cond text-[30px]">{r.wa}<span className="text-brand">–</span>{r.wb}</span>
+                  </Link>
+                ))}
+              </div>
             </Section>
           )}
           {show("people") && (
-            <Section title="popular on beef">
-              <div className="divide-y">{mounted && popular.map(({ u, score, followers }) => <UserRow key={u.id} userId={u.id} sub={`@${u.username} · ${score} beef score · ${followers} followers`} />)}</div>
+            <Section title="people to challenge">
+              <div className="no-scrollbar -mx-4 flex overflow-x-auto px-4">
+                <div className="flex border-2 border-ink">
+                  {mounted && popular.map(({ u, score }, i) => (
+                    <div key={u.id} className={cx("w-[132px] shrink-0 p-3", i > 0 && "border-l-2 border-ink")}>
+                      <Link href={`/u/${u.username}`} className="block">
+                        <Avatar user={u} size={44} />
+                        <p className="cond mt-2 truncate text-[22px] leading-[.9]">{u.displayName}</p>
+                        <p className="num mt-1 text-[11px] text-muted">{score} score</p>
+                      </Link>
+                      {u.id !== s.session.userId && <Link href={`/duel/new?vs=${u.id}`} className="meta mt-2 inline-block bg-brand px-1.5 py-0.5 font-bold text-[rgb(18_17_16)]">challenge</Link>}
+                    </div>
+                  ))}
+                </div>
+              </div>
             </Section>
           )}
+          {show("stocks") && (
+            <Section title="stocks" action={<SourceBadge />}>
+              <StockGrid limit={filter === "stocks" ? 7 : 6} />
+            </Section>
+          )}
+          {show("duels") && (
+            <Section title="open to watch" action={<Link href="/duel?tab=open" className="meta font-bold underline decoration-2 underline-offset-4">see all</Link>}>
+              <div className="grid gap-3 sm:grid-cols-2">{publicDuels.map((d) => <DuelCard key={d.id} d={d} compact />)}</div>
+            </Section>
+          )}
+          {filter === "all" && <div className="mb-9 xl:hidden"><DailyBeefCard /></div>}
           {show("communities") && (
-            <Section title="communities" action={<Link href="/communities/new" className="text-sm font-semibold text-brand-dark">create</Link>}>
+            <Section title="communities" action={<Link href="/communities/new" className="meta font-bold underline decoration-2 underline-offset-4">create</Link>}>
               <CommunityList ids={s.communities.map((c) => c.id)} />
             </Section>
           )}
