@@ -4,9 +4,10 @@ import { createPublicClient, createWalletClient, custom, encodeFunctionData, erc
 import { privateKeyToAccount, type PrivateKeyAccount } from "viem/accounts";
 import escrowArtifact from "../../../contracts/out/BeefEscrow.json";
 import usdcArtifact from "../../../contracts/out/MockUSDC.json";
-import { OPEN_SLOT, buildCreateDuelCalls, buildJoinCalls, duelIdToBytes32, usdcUnits } from "./calls";
+import { OPEN_SLOT, buildCreateDuelCalls, buildJoinCalls, duelIdToBytes32, usdcUnits, type EscrowResult } from "./calls";
+import { parseUnits } from "viem";
 import { checkCalls, defaultPolicy } from "./policy";
-import { joinDigest, settlementDigest, signJoin, signSettlement } from "@/lib/server/oracle";
+import { joinDigest, resultDigest, signJoin, signResult } from "@/lib/server/oracle";
 
 // real contract tests on an in-process evm with chain id 84532. a smart account's
 // batch is atomic; here the same calls are sent one by one from each participant.
@@ -51,12 +52,20 @@ const create = (duelId: string, stake: number, slots: number) =>
   buildCreateDuelCalls({ usdc, escrow, duelId, stake, participants: [alice, ...Array(slots - 1).fill(OPEN_SLOT)], termsHash: keccak256(toHex(`terms:${duelId}`)) });
 const join = async (duelId: string, stake: number, who: Address) =>
   buildJoinCalls({ usdc, escrow, duelId, stake, joinSig: await signJoin({ escrow, duelId, who }, ORACLE_KEY) });
-async function settleSigned(duelId: string, winners: Address[], from: Address, key: Hex = ORACLE_KEY) {
+/** a signed v3 price result, relayed by `from`. prices in participant order (decimal strings). */
+async function settleResult(duelId: string, prices: { start: string[]; end: string[] }, from: Address, o: { key?: Hex; tweak?: (r: EscrowResult, now: bigint) => void } = {}) {
   const keyId = duelIdToBytes32(duelId);
-  const [, , , terms] = await read("getDuel", [keyId]);
-  const settlementHash = keccak256(toHex(`settlement:${duelId}`));
-  const sig = await signSettlement({ escrow, duelId, termsHash: terms, winners, settlementHash }, key);
-  return send(from, escrow, encodeFunctionData({ abi: escrowAbi, functionName: "settle", args: [keyId, winners, settlementHash, sig] }));
+  const [, participants, , terms] = await read("getDuel", [keyId]);
+  const now = (await pub.getBlock()).timestamp;
+  const startAt = now - 10n * 86400n, endAt = now - 86400n;
+  const r: EscrowResult = {
+    startPrices: prices.start.map((v) => parseUnits(v, 18)), endPrices: prices.end.map((v) => parseUnits(v, 18)),
+    startTimes: prices.start.map(() => startAt + 60n), endTimes: prices.end.map(() => endAt + 120n),
+    startAt, endAt, maxDelay: 8n * 3600n, evidenceHash: keccak256(toHex(`evidence:${duelId}`)),
+  };
+  o.tweak?.(r, now);
+  const sig = await signResult({ escrow, duelId, termsHash: terms, participants, result: r }, o.key ?? ORACLE_KEY);
+  return send(from, escrow, encodeFunctionData({ abi: escrowAbi, functionName: "settleWithPrices", args: [keyId, r, sig] }));
 }
 
 beforeAll(async () => {
@@ -78,7 +87,7 @@ describe("BeefEscrow (local evm, chain id 84532)", () => {
     const [stake, , deposits, , , status] = await read("getDuel", [duelIdToBytes32("c1")]);
     expect([stake, Number(deposits), Number(status)]).toEqual([35_500_000n, 2, 2]);
     expect(await balanceUnits(escrow) - e0).toBe(71_000_000n); // prize pool = 35.50 + 35.50
-    await settleSigned("c1", [alice], carol);
+    await settleResult("c1", { start: ["100", "100"], end: ["110", "105"] }, carol); // alice +10% beats bob +5%
     expect(await balanceUnits(alice) - a0).toBe(35_500_000n); // paid 35.50, got 71.00 back
     expect(await balanceUnits(escrow)).toBe(e0);
   });
@@ -87,7 +96,7 @@ describe("BeefEscrow (local evm, chain id 84532)", () => {
     await sendCalls(alice, create("c2", 150.25, 2));
     await sendCalls(bob, await join("c2", 150.25, bob));
     const [a0, b0] = [await balanceUnits(alice), await balanceUnits(bob)];
-    await settleSigned("c2", [], carol);
+    await settleResult("c2", { start: ["100", "250"], end: ["103", "257.5"] }, carol); // +3% each
     expect([await balanceUnits(alice) - a0, await balanceUnits(bob) - b0]).toEqual([150_250_000n, 150_250_000n]);
   });
 
@@ -95,9 +104,9 @@ describe("BeefEscrow (local evm, chain id 84532)", () => {
     await sendCalls(alice, create("dg", 1, 2));
     const k = duelIdToBytes32("dg");
     expect(joinDigest({ escrow, duelId: "dg", who: bob })).toBe(await read("joinDigest", [k, bob]));
-    const [, , , terms] = await read("getDuel", [k]);
-    const sh = keccak256(toHex("x"));
-    expect(settlementDigest({ escrow, duelId: "dg", termsHash: terms, winners: [bob], settlementHash: sh })).toBe(await read("settlementDigest", [k, terms, [bob], sh]));
+    const [, participants, , terms] = await read("getDuel", [k]);
+    const r: EscrowResult = { startPrices: [1n, 2n], endPrices: [3n, 4n], startTimes: [5n, 6n], endTimes: [7n, 8n], startAt: 9n, endAt: 10n, maxDelay: 11n, evidenceHash: keccak256(toHex("x")) };
+    expect(resultDigest({ escrow, duelId: "dg", termsHash: terms, participants, result: r })).toBe(await read("resultDigest", [k, r]));
   });
 
   it("the calls beef builds pass the sponsorship policy", async () => {
@@ -145,19 +154,34 @@ describe("BeefEscrow (local evm, chain id 84532)", () => {
     await clearAllowance(alice);
   });
 
-  it("only an oracle-signed result pays out, exactly once", async () => {
-    await expectRevert(settleSigned("d1", [bob], bob, KEYS[1])); // signed by bob, not the oracle
+  it("only an oracle-signed result pays out, exactly once; the contract picks the winner from the prices", async () => {
+    await expectRevert(settleResult("d1", { start: ["100", "100"], end: ["105", "103"] }, bob, { key: KEYS[1] })); // signed by bob, not the oracle
     const a0 = await balance(alice);
-    await settleSigned("d1", [alice], mallory); // anyone can relay a valid result
+    await settleResult("d1", { start: ["180", "250"], end: ["189", "257.5"] }, mallory); // anyone can relay: alice +5% beats bob +3%
     expect(await balance(alice) - a0).toBe(20);
-    await expectRevert(settleSigned("d1", [alice], alice)); // settled once
+    await expectRevert(settleResult("d1", { start: ["180", "250"], end: ["189", "257.5"] }, alice)); // replay: settled once
+  });
+
+  it("validates the window, timestamps and prices before paying", async () => {
+    await sendCalls(alice, create("w1", 5, 2));
+    await sendCalls(bob, await join("w1", 5, bob));
+    const p = { start: ["100", "100"], end: ["110", "105"] };
+    await expectRevert(settleResult("w1", p, bob, { tweak: (r) => { r.startTimes[0] = r.startAt - 1n; } })); // observed before the agreed start
+    await expectRevert(settleResult("w1", p, bob, { tweak: (r) => { r.endTimes[1] = r.endAt + r.maxDelay + 1n; } })); // too late after the deadline
+    await expectRevert(settleResult("w1", p, bob, { tweak: (r, now) => { r.endAt = now + 3600n; r.endTimes = [r.endAt, r.endAt]; } })); // deadline in the future
+    await expectRevert(settleResult("w1", p, bob, { tweak: (r) => { r.maxDelay = 2n * 86400n; } })); // delay above the cap
+    await expectRevert(settleResult("w1", { start: ["100", "0"], end: ["110", "105"] }, bob)); // zero price
+    await expectRevert(settleResult("w1", p, bob, { tweak: (r) => { r.endPrices = r.endPrices.slice(0, 1); } })); // wrong length
+    const [b0] = [await balance(bob)];
+    await settleResult("w1", { start: ["400", "600"], end: ["380", "588"] }, alice); // both fall: bob −2% beats alice −5%
+    expect(await balance(bob) - b0).toBe(10);
   });
 
   it("a draw returns every stake", async () => {
     await sendCalls(alice, create("d6", 5, 2));
     await sendCalls(bob, await join("d6", 5, bob));
     const [a0, b0] = [await balance(alice), await balance(bob)];
-    await settleSigned("d6", [], bob);
+    await settleResult("d6", { start: ["500", "280"], end: ["515", "288.4"] }, bob); // +3% each
     expect([await balance(alice) - a0, await balance(bob) - b0]).toEqual([5, 5]);
   });
 
@@ -166,7 +190,7 @@ describe("BeefEscrow (local evm, chain id 84532)", () => {
     await sendCalls(bob, await join("g1", 10, bob));
     await sendCalls(carol, await join("g1", 10, carol));
     const [a0, c0] = [await balance(alice), await balance(carol)];
-    await settleSigned("g1", [alice, carol], bob);
+    await settleResult("g1", { start: ["100", "100", "100"], end: ["110", "105", "110"] }, bob); // alice & carol +10%, bob +5%
     expect([await balance(alice) - a0, await balance(carol) - c0]).toEqual([15, 15]);
   });
 

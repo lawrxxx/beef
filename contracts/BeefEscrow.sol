@@ -117,14 +117,59 @@ contract BeefEscrow {
         if (d.deposits == d.participants.length) { d.status = Status.Active; emit Activated(duelId); }
     }
 
-    /// pays out a settlement signed by the oracle. can only happen once per duel.
-    /// winners = [] means a draw: every stake is returned.
-    function settle(bytes32 duelId, address[] calldata winners, bytes32 settlementHash, bytes calldata oracleSig) external {
+    /// a price result for one duel, produced by beef's settlement relay from chainlink data
+    /// feeds on base mainnet and signed by the oracle key. arrays follow participant order.
+    struct Result {
+        uint256[] startPrices;   // 18-decimal prices
+        uint256[] endPrices;
+        uint64[] startTimes;     // chainlink round updatedAt of each observation
+        uint64[] endTimes;
+        uint64 startAt;          // agreed start (market open after activation)
+        uint64 endAt;            // agreed deadline
+        uint64 maxDelay;         // observations must fall in [agreed time, agreed time + maxDelay]
+        bytes32 evidenceHash;    // hash of feed addresses, round ids, raw answers (stored offchain)
+    }
+
+    uint64 public constant MAX_RESOLUTION_DELAY = 1 days;
+
+    /// pays out a signed price result. the contract checks the signer, the duel, the
+    /// participants, every price and timestamp and the agreed window, then works out the
+    /// winner itself (higher percentage return; equal at 0.0001 points = draw). once only.
+    function settleWithPrices(bytes32 duelId, Result calldata r, bytes calldata oracleSig) external {
         Duel storage d = duels[duelId];
         if (d.status != Status.Active) revert BadState();
-        bytes32 digest = MessageHashUtils.toEthSignedMessageHash(settlementDigest(duelId, d.termsHash, winners, settlementHash));
+        uint256 n = d.participants.length;
+        if (r.startPrices.length != n || r.endPrices.length != n || r.startTimes.length != n || r.endTimes.length != n) revert BadParams();
+        if (r.endAt <= r.startAt || r.endAt > block.timestamp || r.maxDelay > MAX_RESOLUTION_DELAY) revert BadParams();
+        bytes32 digest = MessageHashUtils.toEthSignedMessageHash(resultDigest(duelId, r));
         if (ECDSA.recover(digest, oracleSig) != oracle) revert BadSignature();
-        for (uint256 i; i < winners.length; i++) if (!_isParticipant(d, winners[i])) revert NotParticipant();
+
+        int256 best = type(int256).min;
+        int256[] memory c = new int256[](n);
+        for (uint256 i; i < n; i++) {
+            if (r.startPrices[i] == 0 || r.endPrices[i] == 0) revert BadParams();
+            if (r.startTimes[i] < r.startAt || r.startTimes[i] > r.startAt + r.maxDelay) revert BadParams();
+            if (r.endTimes[i] < r.endAt || r.endTimes[i] > r.endAt + r.maxDelay) revert BadParams();
+            // percent × 1e4, truncated toward zero (same as beef's bigint engine)
+            c[i] = ((int256(r.endPrices[i]) - int256(r.startPrices[i])) * 1e8 / int256(r.startPrices[i])) / 100;
+            if (c[i] > best) best = c[i];
+        }
+        uint256 count;
+        for (uint256 i; i < n; i++) if (c[i] == best) count++;
+        address[] memory winners = new address[](count == n ? 0 : count);
+        if (count != n) {
+            uint256 k;
+            for (uint256 i; i < n; i++) if (c[i] == best) winners[k++] = d.participants[i];
+        }
+        _payout(duelId, d, winners, r.evidenceHash);
+    }
+
+    function resultDigest(bytes32 duelId, Result calldata r) public view returns (bytes32) {
+        Duel storage d = duels[duelId];
+        return keccak256(abi.encode("beef.settle.v3", block.chainid, address(this), duelId, d.termsHash, d.participants, r));
+    }
+
+    function _payout(bytes32 duelId, Duel storage d, address[] memory winners, bytes32 evidenceHash) private {
         d.status = Status.Settled; // effects before transfers
         uint256 n = d.participants.length;
         if (winners.length == 0) {
@@ -136,10 +181,9 @@ contract BeefEscrow {
             uint256 dust = pot - share * winners.length;
             if (dust > 0) usdc.safeTransfer(winners[0], dust);
         }
-        emit Settled(duelId, winners, settlementHash);
+        emit Settled(duelId, winners, evidenceHash);
     }
 
-    /// if funding never completed, anyone can return the deposits after the window.
     function refund(bytes32 duelId) external {
         Duel storage d = duels[duelId];
         if (d.status != Status.Funding || block.timestamp <= d.fundingDeadline) revert BadState();
@@ -152,9 +196,6 @@ contract BeefEscrow {
     }
 
     /// the message the oracle signs. bound to this chain and this contract (no replay).
-    function settlementDigest(bytes32 duelId, bytes32 termsHash, address[] calldata winners, bytes32 settlementHash) public view returns (bytes32) {
-        return keccak256(abi.encode(block.chainid, address(this), duelId, termsHash, winners, settlementHash));
-    }
 
     /// the message the oracle signs to let `who` take an open slot in `duelId`
     function joinDigest(bytes32 duelId, address who) public view returns (bytes32) {

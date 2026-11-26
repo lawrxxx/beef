@@ -1,6 +1,6 @@
 import { decodeFunctionData, erc20Abi, getAddress, type Address } from "viem";
 import { BEEF_ESCROW_ABI } from "./escrow-abi";
-import { type Call } from "./calls";
+import { LEGACY_SETTLE_ABI, type Call } from "./calls";
 import { STAKE_MAX_UNITS, STAKE_MIN_UNITS } from "@/lib/stake";
 
 // gas sponsorship policy. the paymaster proxy runs every user operation through this
@@ -10,7 +10,7 @@ export interface SponsorshipPolicy {
   usdc: Address;
   escrow: Address;
   /** escrow functions users may call with sponsored gas */
-  escrowFunctions: readonly ("createDuel" | "join" | "refund" | "settle")[];
+  escrowFunctions: readonly ("createDuel" | "join" | "refund" | "settle" | "settleWithPrices")[];
   minStakeUnits: bigint;
   maxStakeUnits: bigint;
   perUserDailyLimit: number;
@@ -21,7 +21,7 @@ export function defaultPolicy(usdc: Address, escrow: Address): SponsorshipPolicy
   return {
     usdc: getAddress(usdc),
     escrow: getAddress(escrow),
-    escrowFunctions: ["createDuel", "join", "refund", "settle"],
+    escrowFunctions: ["createDuel", "join", "refund", "settle", "settleWithPrices"],
     minStakeUnits: STAKE_MIN_UNITS,
     maxStakeUnits: STAKE_MAX_UNITS,
     perUserDailyLimit: Number(process.env.SPONSOR_PER_USER_DAILY ?? 10),
@@ -57,7 +57,10 @@ export function checkCalls(calls: Call[], policy: SponsorshipPolicy): PolicyResu
       approvals++;
     } else if (to === policy.escrow) {
       let d;
-      try { d = decodeFunctionData({ abi: BEEF_ESCROW_ABI, data: c.data }); } catch { return no("unknown escrow call"); }
+      try { d = decodeFunctionData({ abi: BEEF_ESCROW_ABI, data: c.data }); }
+      catch {
+        try { d = decodeFunctionData({ abi: LEGACY_SETTLE_ABI, data: c.data }); } catch { return no("unknown escrow call"); } // settle() on pre-v3 escrows
+      }
       if (!(policy.escrowFunctions as readonly string[]).includes(d.functionName)) return no(`escrow.${d.functionName} is not sponsored`);
       if (d.functionName === "createDuel") {
         const stake = d.args[1] as bigint;

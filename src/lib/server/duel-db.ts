@@ -5,7 +5,7 @@ import type { SettleableDuel } from "@/lib/settlement/service";
 
 /** loads a duel from postgres in the shape the settlement service needs */
 export async function loadSettleableDuel(db: SupabaseClient, duelId: string): Promise<SettleableDuel | null> {
-  const { data: d } = await db.from("duels").select("id,status,deadline").eq("id", duelId).maybeSingle();
+  const { data: d } = await db.from("duels").select("id,status,deadline,start_at").eq("id", duelId).maybeSingle();
   if (!d) return null;
   const { data: ps } = await db.from("duel_participants").select("user_id,ticker,accepted_at").eq("duel_id", duelId);
   if (!ps?.length) return null;
@@ -14,13 +14,14 @@ export async function loadSettleableDuel(db: SupabaseClient, duelId: string): Pr
   const { data: snaps } = await db.from("duel_price_snapshots").select("*").eq("duel_id", duelId).eq("kind", "start");
   return {
     id: d.id, status: d.status, deadline: new Date(d.deadline).toISOString(),
-    acceptedAt: new Date(acceptedAt).toISOString(),
+    acceptedAt: new Date(acceptedAt).toISOString(), startAt: d.start_at ? new Date(d.start_at).toISOString() : undefined,
     participants: ps.map((p: any) => ({ userId: p.user_id, ticker: p.ticker })),
     startSnapshots: (snaps ?? []).map((r: any): PriceSnapshot => ({
       ticker: r.ticker, kind: r.kind, price: Number(r.price), priceE18: r.price_e18 != null ? String(r.price_e18) : undefined,
       session: r.session, timestamp: new Date(r.price_timestamp).toISOString(), source: r.source, simulated: r.simulated,
       streamId: r.stream_id ?? undefined, observationsTimestamp: r.observations_ts != null ? Number(r.observations_ts) : undefined,
       marketStatus: r.market_status ?? undefined, reportHash: r.report_hash ?? undefined, verification: r.verification ?? undefined,
+      roundId: r.round_id ?? undefined, answer: r.answer != null ? String(r.answer) : undefined, decimals: r.decimals ?? undefined, readBlock: r.read_block != null ? String(r.read_block) : undefined,
     })),
   };
 }
@@ -34,6 +35,7 @@ export async function saveSnapshots(db: SupabaseClient, duelId: string, snaps: P
       price_e18: s.priceE18 ?? null, adjusted_e18: s.adjustedE18 ?? null, stream_id: s.streamId ?? null,
       observations_ts: s.observationsTimestamp ?? null, market_status: s.marketStatus ?? null, report_hash: s.reportHash ?? null,
       verification: s.verification ?? null,
+      round_id: s.roundId ?? null, answer: s.answer ?? null, decimals: s.decimals ?? null, read_block: s.readBlock ?? null,
     })),
     { onConflict: "duel_id,ticker,kind", ignoreDuplicates: true },
   );

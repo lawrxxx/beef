@@ -94,36 +94,68 @@ copy `.env.example` → `.env.local`.
 | data loading | the client loads the latest few hundred rows of each table; it needs pagination for real traffic |
 | rate limiting | in-memory per server instance |
 
-## stock prices: chainlink
+## stock prices: chainlink data feeds (base mainnet)
 
-beef gets stock prices only from chainlink, from one of two sources picked by `CHAINLINK_PRICE_SOURCE`:
+beef reads **chainlink data feeds for coinbase tokenized stocks** on base mainnet (8453), following [chainlink's docs](https://docs.chain.link/data-feeds/tokenized-equity-feeds/coinbase). the client is read-only, and beef never sends a mainnet transaction. data streams, alpha vantage, yahoo, polygon and simulated prices aren't used.
 
-### data feeds (default, free)
-chainlink data feeds for **coinbase tokenized stocks on base mainnet (8453)**, per [base's docs](https://docs.base.org/build-on-base/integrate-defi/list-tokenized-stocks). beef only **reads** them (`latestRoundData` / `getRoundData`). there's no api key, it costs nothing, and beef never sends a mainnet transaction. escrow and stakes stay on base sepolia.
-
-| ticker | chainlink feed (base mainnet) | token |
+| ticker | feed (proxy) | decimals |
 |---|---|---|
-| NVDA | `0x04689a41629776563E6822F76f2e57D148d28513` | NVDAc |
-| AAPL | `0x787f13dEa48Db0897CbCDD985de77809D837F988` | AAPLc |
-| TSLA | `0xFaf869185383a24F8cb00e27BdA6b63B9905DCb4` | TSLAc |
-| MSFT | `0xeB10A6c9aa7E537aEd766C08c35Dae35B321b18c` | MSFTc |
-| AMZN | `0x06A8E4b3aBB3B7543d8396FB2B763d22820cB295` | AMZNc |
-| GOOGL | `0x5bF49E0ffA937CE2FfF033c739aD7C634c4D34F2` | GOOGLc |
-| META | `0x6526aE6797A76123638b863AeE4dD27Ba4E4b27D` | METAc |
+| NVDA | `0x04689a41629776563E6822F76f2e57D148d28513` | 8 |
+| AAPL | `0x787f13dEa48Db0897CbCDD985de77809D837F988` | 8 |
+| TSLA | `0xFaf869185383a24F8cb00e27BdA6b63B9905DCb4` | 8 |
+| MSFT | `0xeB10A6c9aa7E537aEd766C08c35Dae35B321b18c` | 8 |
+| AMZN | `0x06A8E4b3aBB3B7543d8396FB2B763d22820cB295` | 8 |
+| GOOGL | `0x5bF49E0ffA937CE2FfF033c739aD7C634c4D34F2` | 8 |
+| META | `0x6526aE6797A76123638b863AeE4dD27Ba4E4b27D` | 8 |
 
-- **where the addresses come from:** coinbase's public `GET /v1/tokenized-stocks/nav-feeds` and `/v1/tokenized-stocks`, retrieved 2026-11-26. at runtime each feed must answer `description() = "Coinbase <TICKER>"` and `decimals() = 8`, or it isn't used.
-- **what the feeds are:**
-  - total-return values (price × a multiplier that absorbs dividends and splits)
-  - update on a 0.5% move or a 24-hour heartbeat during market hours
-  - frozen off-hours and during corporate actions
-- **methodology `chainlink_data_feeds_total_return_v1`** (`src/lib/chainlink/feeds.ts`):
-  - start and end price = the latest feed round updated at or before the official close (4pm et, 1pm on early closes) of the lock and deadline sessions, the same timestamps for both stocks
-  - it pauses if no round exists, the value isn't positive, or the round is more than 25 hours old (frozen, halted or stale)
-  - splits aren't adjusted again; a move of 40% or more pauses settlement for a manual check
-  - **precision:** a "close" can differ from the exchange close by up to about 0.5%, because of the feeds' deviation threshold
-- **evidence:** each snapshot stores the feed address, round id, value, update time and a round hash, marked `onchain` (read directly from chainlink's contract; there's no signed report to verify).
+- **verification:** checked 2026-12-01 against chainlink's feed directory for base mainnet (the data behind the docs table). every feed is "Coinbase <TICKER>", 8 decimals, 24h heartbeat, 0.5% deviation, us equities 24/5. at runtime each feed must answer `description()` and `decimals()` to match.
+- **what the values are:** total-return (price × a multiplier that absorbs dividends and splits). they're **chainlink feed observations, not official exchange opening-auction prices**.
 
-### data streams (optional, paid)
+### duel timing (step 5 of 6)
+
+| option | start | deadline |
+|---|---|---|
+| next market open | the first 9:30am et open after both players accept | the next market open after the start |
+| one week | the same | activation + 7 calendar days, rolled to the next open at or after it |
+| custom | the same | a date and time the creator picks, inside regular hours (9:30am–4pm et, 1pm on early closes) |
+
+- **when the schedule is fixed:** at activation, i.e. when the last stake is confirmed (`activateIfReady` in `src/lib/server/wallet-deps.ts`). before that, the app shows "if accepted now".
+- **custom deadlines:** checked again before anyone joins, so a deadline that's become too soon blocks the join.
+- **calendar:** `src/lib/market/calendar.ts`, the nyse/nasdaq holidays and early closes for 2025–2027, with dst handled by `Intl`. deadlines outside that range are refused. unscheduled closures and halts show up as missing feed updates.
+
+### methodology `chainlink_data_feeds_open_v2`
+- each price is the **first feed round updated at or after the agreed time** (start or deadline), if it arrives within `CHAINLINK_RESOLUTION_MAX_DELAY_S` (default 8h, capped at 24h by the escrow).
+- both stocks use the same two agreed times.
+- **if an update hasn't arrived yet and the window is open,** settlement waits.
+- **if the window closes without one,** or a value isn't positive, the duel moves to **awaiting verification**. nothing is substituted.
+- **starting snapshots:** locked at the start and append-only. they store the feed address, round id, raw answer and decimals, updatedAt, the base mainnet block they were read at, and a round hash.
+- **return:** (end − start) / start × 100 in bigint, compared at 0.0001 points.
+
+### settlement relay (trusted, between two networks)
+the feeds are on base mainnet and the escrow is on **base sepolia (84532)**, which can't read base mainnet. so `src/lib/server/relay.ts`:
+1. takes the stored result (both feed observations validated)
+2. builds the duel's result: prices, observation times, agreed window, evidence hash
+3. signs it with the settlement oracle key
+4. submits `settleWithPrices` to the escrow with its own key
+5. checks the receipt for `Settled`
+6. records `duels.settle_tx`
+
+the cron retries until it's confirmed. **base sepolia doesn't independently verify the mainnet feed.** trust rests on the relay, and anyone can re-check the stored round ids against the feed contracts.
+
+**escrow v3** (`0x7d60986d3cf4879e8aaf708c44dac4e423a93739`) checks before paying, once:
+- the signer
+- the duel and its participants
+- every price (non-zero) and every observation time, each within [agreed time, agreed time + max delay]
+- deadline after start and not in the future
+
+it then **computes the winner itself** (or a draw at 0.0001 points). duels funded on earlier escrows (`0x760c…`, `0xAe3a…`) pay out through their original `settle()`.
+
+### data streams (not used)
+
+the data streams code (`src/lib/chainlink/{prices,report,verifier,discovery,directory}.ts`) is kept as a library with its tests but isn't wired into the app.
+
+<details><summary>previous notes</summary>
+
 
 the data streams source uses **chainlink data streams, 24/5 us equities** (rwa advanced v11 schema), via the official sdk `@chainlink/data-streams-sdk@2.0.0`. the simulated provider and the polygon / finnhub / alpha vantage adapters are gone. supported tickers: NVDA, AAPL, TSLA, MSFT, AMZN, GOOGL, META. without data streams credentials the app shows "price unavailable" and nothing locks or settles. nothing is estimated.
 
@@ -161,6 +193,8 @@ the data streams source uses **chainlink data streams, 24/5 us equities** (rwa a
 - `corporate_actions`
 - snapshot columns: price_e18, stream_id, observations_ts, market_status, report_hash, verification
 - `duels.settle_tx`
+
+</details>
 
 ## wallets & sponsored gas (base sepolia only)
 

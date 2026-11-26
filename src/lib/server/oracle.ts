@@ -2,7 +2,7 @@ import "server-only";
 import { encodeAbiParameters, keccak256, type Address, type Hex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { CHAIN_ID } from "@/lib/chain/config";
-import { duelIdToBytes32 } from "@/lib/wallet/calls";
+import { RESULT_ABI_TYPE, duelIdToBytes32, type EscrowResult } from "@/lib/wallet/calls";
 
 // signs settlement results for the escrow. the key lives only in server env
 // (SETTLEMENT_ORACLE_PRIVATE_KEY); its address is the escrow's immutable `oracle`.
@@ -14,6 +14,19 @@ export function settlementDigest(p: { escrow: Address; duelId: string; termsHash
     [{ type: "uint256" }, { type: "address" }, { type: "bytes32" }, { type: "bytes32" }, { type: "address[]" }, { type: "bytes32" }],
     [BigInt(CHAIN_ID), p.escrow, duelIdToBytes32(p.duelId), p.termsHash, p.winners, p.settlementHash],
   ));
+}
+
+/** must equal BeefEscrow.resultDigest (v3): binds chain, escrow, duel, terms, participants and the full price result */
+export function resultDigest(p: { escrow: Address; duelId: string; termsHash: Hex; participants: Address[]; result: EscrowResult }): Hex {
+  return keccak256(encodeAbiParameters(
+    [{ type: "string" }, { type: "uint256" }, { type: "address" }, { type: "bytes32" }, { type: "bytes32" }, { type: "address[]" }, RESULT_ABI_TYPE],
+    ["beef.settle.v3", BigInt(CHAIN_ID), p.escrow, duelIdToBytes32(p.duelId), p.termsHash, p.participants, p.result],
+  ));
+}
+
+export async function signResult(p: Parameters<typeof resultDigest>[0], key = oracleKey()): Promise<Hex> {
+  if (!key) throw new Error("settlement oracle key isn't configured on the server");
+  return privateKeyToAccount(key).signMessage({ message: { raw: resultDigest(p) } });
 }
 
 /** must equal BeefEscrow.joinDigest: lets exactly `who` take an open slot in this duel */

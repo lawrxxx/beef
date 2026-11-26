@@ -343,6 +343,7 @@ export interface CreateDuelInput {
   stake: number;
   deadline: string;
   deadlineLabel: string;
+  expirationType: "next_open" | "one_week" | "custom";
   visibility: Duel["visibility"];
   title?: string;
   communityId?: string;
@@ -378,7 +379,7 @@ export async function createDuel(input: CreateDuelInput): Promise<Duel> {
       ...(input.extra ?? []).map((e) => ({ userId: e.userId, ticker: e.ticker, accepted: false })),
     ],
     stake: input.stake, visibility: input.visibility, open: input.opponentId === null,
-    deadline: input.deadline, deadlineLabel: input.deadlineLabel,
+    deadline: input.deadline, deadlineLabel: input.deadlineLabel, expirationType: input.expirationType,
     // matches the escrow's 2-day funding window
     inviteExpiresAt: new Date(Math.min(Date.now() + 47 * 3600e3, new Date(input.deadline).getTime() - 3600e3)).toISOString(),
     status: "pending", escrowState: "unfunded", startSnapshots: [], endSnapshots: [], title: input.title?.trim() || undefined,
@@ -430,7 +431,7 @@ export async function requestSettlement(id: string) {
   if (!d || !["active", "awaiting_verification"].includes(d.status)) return;
   if (d.settlement && d.settlement.status !== "needs_verification") return;
   const r = await post<{ outcome: string; reason?: string }>("/api/duels/settle", { duelId: id });
-  if (r.outcome === "not_due") throw new ActionError("this duel hasn't reached its deadline close yet");
+  if (r.outcome === "not_due") throw new ActionError("this duel's deadline hasn't been reached yet, or chainlink hasn't published the first update after it");
   if (r.outcome === "rejected") throw new ActionError(r.reason ?? "settlement rejected");
   await reloadRemote();
 }
@@ -441,7 +442,7 @@ export async function tickDuels() {
   for (const d of state.duels) {
     if (!d.participants.some((p) => p.userId === state.session.userId)) continue;
     try {
-      if (d.status === "accepted" && d.lockAt && new Date(d.lockAt).getTime() <= t) await requestLock(d.id);
+      if (d.status === "accepted" && d.startAt && new Date(d.startAt).getTime() <= t) await requestLock(d.id);
       else if (d.status === "active" && new Date(d.deadline).getTime() <= t) await requestSettlement(d.id);
     } catch { /* not ready yet; retried on the next tick */ }
   }

@@ -48,6 +48,11 @@ export interface PriceSnapshot {
   marketStatus?: number;
   reportHash?: string;
   roundId?: string;
+  /** raw chainlink feed answer and its decimals */
+  answer?: string;
+  decimals?: number;
+  /** base mainnet block the feed was read at */
+  readBlock?: string;
   verification?: { status: string; method: string; verifier: string; configDigest: string | null; checkedAt: string };
 }
 
@@ -133,6 +138,10 @@ export interface Duel {
   startSnapshots: PriceSnapshot[];
   endSnapshots: PriceSnapshot[];
   settlement?: Settlement;
+  /** how the deadline was chosen: next market open, one week, or a custom time */
+  expirationType?: "next_open" | "one_week" | "custom";
+  /** agreed start: the first market open after activation (set when the duel activates) */
+  startAt?: string;
   /** base sepolia transaction that paid out (settle) or refunded the escrow */
   settleTx?: string;
   /** escrow state recorded from verified onchain events */

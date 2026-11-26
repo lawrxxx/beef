@@ -59,6 +59,7 @@ function mapDuel(r: any): Duel {
     startSnapshots: snaps("start"), endSnapshots: snaps("end"),
     settlement: settlement ?? undefined,
     escrowState: r.escrow_state ?? "unfunded", settleTx: r.settle_tx ?? undefined,
+    expirationType: r.expiration_type ?? undefined, startAt: r.start_at ? new Date(r.start_at).toISOString() : undefined,
     communityId: r.community_id ?? undefined, featured: r.featured, title: r.title ?? undefined, terms,
   };
 }
@@ -222,7 +223,7 @@ export const remote = {
   createDuel: async (sb: SupabaseClient, d: Duel) => {
     await ok(sb.from("duels").insert({
       id: d.id, created_by: d.createdBy, title: d.title ?? null, stake: d.stake, visibility: d.visibility, is_open: d.open,
-      deadline: d.deadline, deadline_label: d.deadlineLabel, invite_expires_at: d.inviteExpiresAt, community_id: d.communityId ?? null,
+      deadline: d.deadline, deadline_label: d.deadlineLabel, invite_expires_at: d.inviteExpiresAt, community_id: d.communityId ?? null, expiration_type: d.expirationType ?? null,
       methodology: d.terms.methodology, provider: d.terms.provider, price_rule: d.terms.priceRule, settlement_rule: d.terms.settlementRule,
       calculation_version: d.terms.calculationVersion, created_at: d.createdAt,
     }));

@@ -31,9 +31,13 @@ export const ESCROW_ADDRESS: `0x${string}` | null = isAddress(rawEscrow) ? getAd
 
 /**
  * escrows deployed earlier that may still hold stakes for older duels (settle/refund
- * only). new duels always open on ESCROW_ADDRESS. 0xAe3a… had a fixed 25 usdc cap.
+ * only, through the legacy settle()). new duels always open on ESCROW_ADDRESS (v3: settleWithPrices,
+ * the contract computes the winner from signed chainlink prices).
  */
-export const PREVIOUS_ESCROWS: readonly `0x${string}`[] = [getAddress("0xae3a647029a7a3fedf10f12dc7bbd098a5bf9f88")];
+export const PREVIOUS_ESCROWS: readonly `0x${string}`[] = [
+  getAddress("0x760cfec066c424deef2bcb54ac2ce287d9ba0eff"), // v2: 1–1000 stakes, offchain winners (settle)
+  getAddress("0xae3a647029a7a3fedf10f12dc7bbd098a5bf9f88"), // v1: 25 cap, offchain winners (settle)
+];
 /** every escrow beef recognises: the current one first */
 export const KNOWN_ESCROWS: readonly `0x${string}`[] = [...(ESCROW_ADDRESS ? [ESCROW_ADDRESS] : []), ...PREVIOUS_ESCROWS.filter((a) => a !== ESCROW_ADDRESS)];
 export const isKnownEscrow = (a: string) => isAddress(a) && KNOWN_ESCROWS.includes(getAddress(a));
