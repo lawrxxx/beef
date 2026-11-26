@@ -41,6 +41,8 @@ async function api<T>(url: string, body: unknown): Promise<T> {
   return j as T;
 }
 
+export const PAYMASTER_MODE: "cdp" | "proxy" = process.env.NEXT_PUBLIC_PAYMASTER === "proxy" ? "proxy" : "cdp";
+
 export const fmtUsdc = (units: bigint | null | undefined) => (units == null ? null : Number(formatUnits(units, USDC_DECIMALS)));
 
 export function useBeefWallet() {
@@ -156,8 +158,12 @@ export function useBeefWallet() {
       evmSmartAccount: smartAccount,
       network: CDP_NETWORK,
       calls: deserializeCalls(prepared.calls),
-      paymasterUrl: `${window.location.origin}/api/paymaster`,
-      paymasterContext: { intentId: prepared.intentId },
+      // gas: coinbase's paymaster on base sepolia, limited in the cdp portal to usdc.approve and the
+      // escrow's createDuel/join/refund/settle. NEXT_PUBLIC_PAYMASTER=proxy routes through beef's own
+      // /api/paymaster instead (needs a publicly reachable url that cdp accepts).
+      ...(PAYMASTER_MODE === "proxy"
+        ? { paymasterUrl: `${window.location.origin}/api/paymaster`, paymasterContext: { intentId: prepared.intentId } }
+        : { useCdpPaymaster: true }),
       idempotencyKey: prepared.intentId, // a double tap can't submit twice
     }))();
     return { intentId: prepared.intentId, userOperationHash };

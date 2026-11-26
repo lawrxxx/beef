@@ -10,6 +10,6 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   return NextResponse.json({
     chainId: CHAIN_ID, usdc: USDC_ADDRESS, escrow: ESCROW_ADDRESS,
-    verification: cdpServerConfigured(), sponsorship: Boolean(process.env.CDP_PAYMASTER_URL), database: Boolean(getAdminSupabase()), oracle: oracleConfigured(), oracleKey: oracleStatus(),
+    verification: cdpServerConfigured(), sponsorship: process.env.NEXT_PUBLIC_PAYMASTER === "proxy" ? Boolean(process.env.CDP_PAYMASTER_URL) : true, paymaster: process.env.NEXT_PUBLIC_PAYMASTER === "proxy" ? "beef proxy" : "cdp", database: Boolean(getAdminSupabase()), oracle: oracleConfigured(), oracleKey: oracleStatus(),
   });
 }
