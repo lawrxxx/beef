@@ -52,7 +52,7 @@ export default function LeaderboardPage() {
   const fmt = (v: number) => (metric === "winrate" ? `${v.toFixed(0)}%` : String(Math.round(v)));
 
   const Row = ({ r, rank, pinned }: { r: (typeof ranked)[number]; rank: number; pinned?: boolean }) => (
-    <Link href={`/u/${r.u.username}`} className={cx("flex items-center gap-3 px-4 py-3 hover:bg-black/[.02]", r.u.id === me && "bg-brand-soft/60", pinned && "border-t-2 border-dashed")}>
+    <Link href={`/u/${r.u.username}`} className={cx("flex items-center gap-3 px-4 py-3 hover:bg-ink/[.02]", r.u.id === me && "bg-brand-soft/60", pinned && "border-t-2 border-dashed")}>
       <span className={cx("num w-7 text-center font-display text-lg font-bold", rank > 3 && "text-faint")}>{rank <= 3 ? ["🥇", "🥈", "🥉"][rank - 1] : rank}</span>
       <Avatar user={r.u} size={40} />
       <div className="min-w-0 flex-1">
@@ -92,7 +92,7 @@ export default function LeaderboardPage() {
       )}
       {me && myIdx < 0 && ranked.length > 0 && <p className="mt-2 text-center text-[13px] text-muted">you're not ranked here yet{metric === "winrate" ? ` (needs ${minForWinRate} settled duels)` : ""}.</p>}
 
-      <div className="mt-4 flex items-start gap-2 rounded-xl bg-black/[.03] p-3 text-[13px] text-ink-soft">
+      <div className="mt-4 flex items-start gap-2 rounded-xl bg-ink/[.03] p-3 text-[13px] text-ink-soft">
         <Info size={16} className="mt-0.5 shrink-0" />
         <p>
           rankings use settled duels {period === "all" ? "since the start" : `from the last ${period === "week" ? "7" : "30"} days`}.

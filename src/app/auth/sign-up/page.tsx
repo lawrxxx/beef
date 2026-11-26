@@ -48,7 +48,7 @@ export default function SignUpPage() {
         <div><label className="label" htmlFor="em">email</label><input id="em" className="input" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} required /></div>
         <div><label className="label" htmlFor="pw">password</label><input id="pw" className="input" type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={8} /><p className="mt-1 text-xs text-muted">at least 8 characters.</p></div>
         <label className="flex items-start gap-3 py-1 text-sm text-ink-soft">
-          <input type="checkbox" className="mt-0.5 h-5 w-5 accent-[#1D1D1F]" checked={adult} onChange={(e) => setAdult(e.target.checked)} />
+          <input type="checkbox" className="mt-0.5 h-5 w-5 accent-ink" checked={adult} onChange={(e) => setAdult(e.target.checked)} />
           <span>i'm 18 or older and agree that beef is for entertainment. read the <Link href="/rules#risk" className="underline">risk disclosure</Link>.</span>
         </label>
         <button className="btn-primary w-full" disabled={busy || !adult}>{busy ? "creating…" : "create account"}</button>

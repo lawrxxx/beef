@@ -17,7 +17,7 @@ export function TrendingList({ limit = 6 }: { limit?: number }) {
     <div className="card divide-y">
       {error && <p className="p-3 text-sm text-loss">prices unavailable right now</p>}
       {trending.map(({ ticker, mentions }, i) => (
-        <Link key={ticker} href={`/stock/${ticker}`} className="flex items-center gap-3 px-4 py-3 hover:bg-black/[.02]">
+        <Link key={ticker} href={`/stock/${ticker}`} className="flex items-center gap-3 px-4 py-3 hover:bg-ink/[.02]">
           <span className="num w-4 text-sm text-faint">{i + 1}</span>
           <div className="min-w-0 flex-1">
             <p className="text-[15px] font-bold">{ticker}</p>

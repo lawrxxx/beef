@@ -1,13 +1,12 @@
 "use client";
 
-import { fmtStake, formatUsdc, prizePoolUnits, stakeUnits } from "@/lib/stake";
+import { fmtStake} from "@/lib/stake";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { ArrowRight, Swords, Users } from "lucide-react";
 import { useBeef } from "@/lib/store/store";
 import { useMe, userById } from "@/lib/hooks";
 import { canAccept, isParticipant, trendingTickers } from "@/lib/derive";
-import { usd } from "@/lib/format";
 import { dailyMatchup } from "@/lib/daily";
 import { Welcome } from "@/components/welcome";
 import { shareLink } from "@/components/share";

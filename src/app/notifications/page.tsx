@@ -28,9 +28,9 @@ export default function NotificationsPage() {
             const actor = n.actorId ? userById(s, n.actorId) : undefined;
             return (
               <li key={n.id}>
-                <Link href={n.href} onClick={() => markRead(n.id)} className={cx("flex items-start gap-3 px-4 py-3.5 hover:bg-black/[.02]", !n.read && "bg-brand-soft/40")}>
+                <Link href={n.href} onClick={() => markRead(n.id)} className={cx("flex items-start gap-3 px-4 py-3.5 hover:bg-ink/[.02]", !n.read && "bg-brand-soft/40")}>
                   <div className="relative">
-                    {actor ? <Avatar user={actor} size={40} /> : <span className="flex h-10 w-10 items-center justify-center rounded-full bg-black/[.05] text-lg">{ICON[n.kind]}</span>}
+                    {actor ? <Avatar user={actor} size={40} /> : <span className="flex h-10 w-10 items-center justify-center rounded-full bg-ink/[.05] text-lg">{ICON[n.kind]}</span>}
                     {actor && <span className="absolute -bottom-1 -right-1 text-sm">{ICON[n.kind]}</span>}
                   </div>
                   <p className="min-w-0 flex-1 text-[15px] leading-snug">{actor && <b>{actor.displayName} </b>}{n.text}<span className="block text-[13px] text-muted">{timeAgo(n.createdAt)}</span></p>

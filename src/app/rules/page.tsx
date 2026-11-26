@@ -23,7 +23,7 @@ export default function RulesPage() {
 
       <section className="card mt-5 p-5">
         <h2 className="text-lg font-bold">the formula</h2>
-        <p className="mt-2 rounded-xl bg-black/[.04] p-3 font-mono text-sm">return = ((ending price − starting price) ÷ starting price) × 100</p>
+        <p className="mt-2 rounded-xl bg-ink/[.04] p-3 font-mono text-sm">return = ((ending price − starting price) ÷ starting price) × 100</p>
         <p className="mt-3 text-[15px] text-ink-soft">beef always compares <b>percentage returns</b>, never share prices or dollar gains. a $180 stock and a $250 stock compete on equal terms.</p>
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
           <div className="rounded-xl border p-3 text-sm">

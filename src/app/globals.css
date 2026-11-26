@@ -3,14 +3,68 @@
 @tailwind utilities;
 
 @layer base {
-  :root { color-scheme: light; -webkit-tap-highlight-color: transparent; }
-  html { background: #F6F5F2; scroll-padding-top: 72px; scroll-padding-bottom: calc(88px + env(safe-area-inset-bottom)); }
+  /* light: the original beef palette, unchanged */
+  :root {
+    color-scheme: light;
+    -webkit-tap-highlight-color: transparent;
+    --bg: 246 245 242;        /* #F6F5F2 warm off-white */
+    --surface: 255 255 255;
+    --ink: 29 29 31;          /* #1D1D1F */
+    --ink-soft: 58 58 61;
+    --inverse: 255 255 255;
+    --muted: 110 110 115;
+    --faint: 161 161 166;
+    --line: 231 229 224;
+    --brand: 229 85 44;       /* #E5552C beef orange */
+    --brand-dark: 199 67 29;
+    --brand-soft: 252 234 227;
+    --brand-ink: 142 46 18;
+    --gain: 17 145 90;
+    --gain-soft: 227 244 235;
+    --loss: 211 63 73;
+    --loss-soft: 251 231 232;
+    --gold: 183 135 28;
+    --gold-soft: 251 241 217;
+    --chainlink: 55 91 210;
+    --shadow-card: 0 1px 2px rgba(20,20,20,0.04), 0 1px 1px rgba(20,20,20,0.02);
+    --shadow-pop: 0 8px 30px rgba(20,20,20,0.10);
+    --shimmer: rgba(255,255,255,.6);
+  }
+  /* dark: deep charcoal, lifted cards, the same orange. no neon, no glow. */
+  .dark {
+    color-scheme: dark;
+    --bg: 18 18 20;           /* #121214 */
+    --surface: 28 28 31;      /* #1C1C1F */
+    --ink: 245 245 247;
+    --ink-soft: 210 210 215;
+    --inverse: 18 18 20;
+    --muted: 156 156 163;
+    --faint: 118 118 125;
+    --line: 46 46 51;
+    --brand: 233 94 54;       /* a touch lighter so it reads on charcoal */
+    --brand-dark: 255 133 99; /* used for orange text/links: lighter in dark */
+    --brand-soft: 58 32 24;
+    --brand-ink: 255 186 163;
+    --gain: 52 199 123;
+    --gain-soft: 18 50 34;
+    --loss: 255 99 108;
+    --loss-soft: 60 26 30;
+    --gold: 227 179 65;
+    --gold-soft: 52 42 16;
+    --chainlink: 125 155 255;
+    --shadow-card: 0 1px 2px rgba(0,0,0,0.35);
+    --shadow-pop: 0 10px 30px rgba(0,0,0,0.45);
+    --shimmer: rgba(255,255,255,.06);
+  }
+  html { background: rgb(var(--bg)); scroll-padding-top: 72px; scroll-padding-bottom: calc(88px + env(safe-area-inset-bottom)); }
   @media (min-width: 1024px) { html { scroll-padding-top: 16px; scroll-padding-bottom: 16px; } }
   body { @apply bg-bg text-ink font-sans antialiased; overflow-x: hidden; text-rendering: optimizeLegibility; }
   * { @apply border-line; }
   .num { font-variant-numeric: tabular-nums; }
   :focus-visible { @apply outline-none ring-2 ring-brand/60 ring-offset-2 ring-offset-bg rounded-lg; }
   input, textarea, select { font-size: 16px; } /* prevents ios zoom */
+  input[type="checkbox"], input[type="radio"] { accent-color: rgb(var(--ink)); }
+  :disabled { cursor: not-allowed; }
   @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
 }
 
@@ -18,18 +72,18 @@
   .card { @apply bg-surface rounded-2xl border border-line shadow-card; }
   .btn { @apply inline-flex items-center justify-center gap-2 rounded-full font-semibold transition active:scale-[.98] disabled:opacity-50 disabled:pointer-events-none select-none; min-height: 44px; @apply px-5 text-[15px]; }
   .btn-sm { min-height: 36px; @apply px-3.5 text-sm; }
-  .btn-primary { @apply btn bg-brand text-white hover:bg-brand-dark; }
-  .btn-dark { @apply btn bg-ink text-white hover:bg-ink-soft; }
-  .btn-ghost { @apply btn bg-transparent text-ink hover:bg-black/5; }
-  .btn-outline { @apply btn bg-surface text-ink border border-line hover:bg-black/[.03]; }
-  .chip { @apply inline-flex items-center gap-1 rounded-full border border-line bg-surface px-3 py-1.5 text-sm font-medium text-ink-soft transition hover:bg-black/[.03]; min-height: 36px; }
-  .chip-active { @apply bg-ink text-white border-ink hover:bg-ink; }
-  .input { @apply w-full rounded-xl border border-line bg-surface px-3.5 py-3 text-[16px] text-ink placeholder:text-faint focus:border-ink/40 focus:outline-none focus:ring-4 focus:ring-black/5; }
+  .btn-primary { @apply btn bg-brand text-white hover:brightness-95; }
+  .btn-dark { @apply btn bg-ink text-inverse hover:bg-ink-soft; }
+  .btn-ghost { @apply btn bg-transparent text-ink hover:bg-ink/5; }
+  .btn-outline { @apply btn bg-surface text-ink border border-line hover:bg-ink/[.03]; }
+  .chip { @apply inline-flex items-center gap-1 rounded-full border border-line bg-surface px-3 py-1.5 text-sm font-medium text-ink-soft transition hover:bg-ink/[.03]; min-height: 36px; }
+  .chip-active { @apply bg-ink text-inverse border-ink hover:bg-ink; }
+  .input { @apply w-full rounded-xl border border-line bg-surface px-3.5 py-3 text-[16px] text-ink placeholder:text-faint focus:border-ink/40 focus:outline-none focus:ring-4 focus:ring-ink/5; }
   .label { @apply mb-1.5 block text-sm font-medium text-ink-soft; }
-  .ticker { @apply inline-flex items-center rounded-md bg-black/[.05] px-1.5 py-0.5 text-[12px] font-bold tracking-wide text-ink; }
+  .ticker { @apply inline-flex items-center rounded-md bg-ink/[.05] px-1.5 py-0.5 text-[12px] font-bold tracking-wide text-ink; }
   .section-title { @apply text-[13px] font-semibold uppercase tracking-wider text-muted; }
-  .skeleton { @apply relative overflow-hidden rounded-lg bg-black/[.06]; }
-  .skeleton::after { content: ""; @apply absolute inset-0 -translate-x-full; background: linear-gradient(90deg, transparent, rgba(255,255,255,.6), transparent); animation: shimmer 1.4s infinite; }
+  .skeleton { @apply relative overflow-hidden rounded-lg bg-ink/[.06]; }
+  .skeleton::after { content: ""; @apply absolute inset-0 -translate-x-full; background: linear-gradient(90deg, transparent, var(--shimmer), transparent); animation: shimmer 1.4s infinite; }
 }
 
 .pb-safe { padding-bottom: env(safe-area-inset-bottom); }

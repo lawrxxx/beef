@@ -42,7 +42,7 @@ export function ReactionBar({ targetType, targetId }: { targetType: "post" | "du
             }}
             className={cx(
               "inline-flex h-8 items-center gap-1 rounded-full border px-2.5 text-[13px] transition active:scale-95",
-              mine === r.kind ? "border-ink/20 bg-ink/[.06] font-semibold" : "border-line bg-surface hover:bg-black/[.03]",
+              mine === r.kind ? "border-ink/20 bg-ink/[.06] font-semibold" : "border-line bg-surface hover:bg-ink/[.03]",
             )}
           >
             <span aria-hidden>{r.emoji}</span>
@@ -148,7 +148,7 @@ export function PostCard({ post }: { post: Post }) {
       <Link href={`/post/${post.id}`} className="mt-2 block whitespace-pre-wrap break-words text-[15px] leading-relaxed text-ink">{body}</Link>
 
       {post.prediction && (
-        <div className="mt-3 flex items-center justify-between gap-3 rounded-xl bg-black/[.03] p-3">
+        <div className="mt-3 flex items-center justify-between gap-3 rounded-xl bg-ink/[.03] p-3">
           <div className="flex items-center gap-2 text-sm">
             <TrendingUp size={16} className="text-gain" />
             <TickerTag t={post.prediction.pick} /> <span className="text-muted">beats</span> <TickerTag t={post.prediction.versus} />

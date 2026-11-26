@@ -50,7 +50,7 @@ export default function DiscoverPage() {
       <div className="relative mb-3">
         <Search size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-faint" />
         <input className="input !rounded-full !pl-10 !pr-10" placeholder="search people, $tickers, duels, communities" value={q} onChange={(e) => setQ(e.target.value)} aria-label="search" />
-        {q && <button className="absolute right-2 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full hover:bg-black/5" onClick={() => setQ("")} aria-label="clear search"><X size={16} /></button>}
+        {q && <button className="absolute right-2 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full hover:bg-ink/5" onClick={() => setQ("")} aria-label="clear search"><X size={16} /></button>}
       </div>
       <Tabs<Filter> value={filter} onChange={setFilter} className="mb-5" options={[{ value: "all", label: "all" }, { value: "people", label: "people" }, { value: "stocks", label: "stocks" }, { value: "duels", label: "duels" }, { value: "communities", label: "communities" }]} />
 

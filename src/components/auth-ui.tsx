@@ -1,5 +1,6 @@
 "use client";
 
+import { ThemeToggle } from "@/components/theme-controls";
 import Link from "next/link";
 import { useEffect, useState, type ReactNode } from "react";
 import { Logo } from "@/components/shell";
@@ -9,7 +10,7 @@ import { useAction } from "@/components/ui";
 export function AuthFrame({ title, subtitle, children, footer }: { title: string; subtitle?: string; children: ReactNode; footer?: ReactNode }) {
   return (
     <div className="flex min-h-dvh flex-col py-8">
-      <Logo />
+      <div className="flex items-center justify-between"><Logo /><ThemeToggle /></div>
       <div className="mt-10 animate-fade-up">
         <h1 className="font-display text-[28px] font-bold leading-tight tracking-tight">{title}</h1>
         {subtitle && <p className="mt-1 text-[15px] text-muted">{subtitle}</p>}

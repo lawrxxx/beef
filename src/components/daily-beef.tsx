@@ -47,7 +47,7 @@ export function DailyBeefCard({ compact }: { compact?: boolean }) {
               key={t}
               disabled={!!mine}
               onClick={() => run(() => pickDaily(d.session, t), `you picked ${t}`)}
-              className={cx("rounded-xl border-2 p-3 text-center transition", mine === t ? "border-ink bg-ink text-white" : mine ? "border-line opacity-60" : "border-line hover:border-ink/30")}
+              className={cx("rounded-xl border-2 p-3 text-center transition", mine === t ? "border-ink bg-ink text-inverse" : mine ? "border-line opacity-60" : "border-line hover:border-ink/30")}
             >
               <span className="block font-display text-xl font-extrabold">{t}</span>
               {mine && <span className="num text-xs">{t === d.a ? aShare : 100 - aShare}% picked</span>}

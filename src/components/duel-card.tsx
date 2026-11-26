@@ -7,7 +7,7 @@ import type { Duel } from "@/lib/types";
 import { useBeef } from "@/lib/store/store";
 import { livePerformance, useNow, useQuotes, userById } from "@/lib/hooks";
 import { STATUS_LABEL, STATUS_STYLE } from "@/lib/derive";
-import { countdown, cx, usd } from "@/lib/format";
+import { countdown, cx} from "@/lib/format";
 import { Avatar, Pct, QuoteLine } from "@/components/ui";
 
 export function StatusPill({ d }: { d: Duel }) {
@@ -21,13 +21,13 @@ export function StatusPill({ d }: { d: Duel }) {
 
 /** horizontal bar comparing two returns. purely visual. */
 export function VersusBar({ a, b }: { a: number | null; b: number | null }) {
-  if (a == null || b == null) return <div className="h-2 rounded-full bg-black/[.05]" />;
+  if (a == null || b == null) return <div className="h-2 rounded-full bg-ink/[.05]" />;
   const diff = Math.max(-10, Math.min(10, a - b));
   const left = 50 + diff * 4.5;
   return (
-    <div className="relative h-2 overflow-hidden rounded-full bg-black/[.06]" aria-hidden>
+    <div className="relative h-2 overflow-hidden rounded-full bg-ink/[.06]" aria-hidden>
       <div className="absolute inset-y-0 left-0 rounded-full bg-ink transition-all duration-700" style={{ width: `${left}%` }} />
-      <div className="absolute inset-y-0 left-1/2 w-0.5 -translate-x-1/2 bg-white" />
+      <div className="absolute inset-y-0 left-1/2 w-0.5 -translate-x-1/2 bg-surface" />
     </div>
   );
 }

@@ -56,7 +56,7 @@ export function Composer({ communityId, onPosted }: { communityId?: string; onPo
         />
       </div>
       {predict && (
-        <div className="mt-3 rounded-xl bg-black/[.03] p-3">
+        <div className="mt-3 rounded-xl bg-ink/[.03] p-3">
           <div className="flex items-center justify-between">
             <p className="text-sm font-semibold">prediction</p>
             <button className="btn-ghost btn-sm !h-8 !px-2" onClick={() => setPredict(false)} aria-label="remove prediction"><X size={16} /></button>

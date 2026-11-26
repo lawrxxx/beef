@@ -1,5 +1,6 @@
 "use client";
 
+import { ThemeToggle } from "@/components/theme-controls";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, type ReactNode } from "react";
@@ -44,7 +45,7 @@ function useUnread() {
 function BellLink({ className }: { className?: string }) {
   const unread = useUnread();
   return (
-    <Link href="/notifications" className={cx("relative inline-flex h-11 w-11 items-center justify-center rounded-full hover:bg-black/5", className)} aria-label={`notifications${unread ? `, ${unread} unread` : ""}`}>
+    <Link href="/notifications" className={cx("relative inline-flex h-11 w-11 items-center justify-center rounded-full hover:bg-ink/5", className)} aria-label={`notifications${unread ? `, ${unread} unread` : ""}`}>
       <Bell size={22} />
       {unread > 0 && <span className="absolute right-1.5 top-1.5 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-brand px-1 text-[11px] font-bold text-white">{unread}</span>}
     </Link>
@@ -72,28 +73,28 @@ export function AppShell({ children }: { children: ReactNode }) {
         <Logo />
         <nav className="mt-8 flex flex-col gap-1" aria-label="primary">
           {NAV.map(({ href, label, icon: Icon }) => (
-            <Link key={href} href={href} className={cx("flex items-center gap-3 rounded-xl px-3 py-2.5 text-[15px] font-medium transition hover:bg-black/5", isActive(path, href) ? "bg-black/[.05] font-semibold text-ink" : "text-ink-soft")} aria-current={isActive(path, href) ? "page" : undefined}>
+            <Link key={href} href={href} className={cx("flex items-center gap-3 rounded-xl px-3 py-2.5 text-[15px] font-medium transition hover:bg-ink/5", isActive(path, href) ? "bg-ink/[.05] font-semibold text-ink" : "text-ink-soft")} aria-current={isActive(path, href) ? "page" : undefined}>
               <Icon size={20} /> {label}
             </Link>
           ))}
-          <Link href="/notifications" className={cx("flex items-center gap-3 rounded-xl px-3 py-2.5 text-[15px] font-medium hover:bg-black/5", isActive(path, "/notifications") ? "bg-black/[.05] font-semibold" : "text-ink-soft")}>
+          <Link href="/notifications" className={cx("flex items-center gap-3 rounded-xl px-3 py-2.5 text-[15px] font-medium hover:bg-ink/5", isActive(path, "/notifications") ? "bg-ink/[.05] font-semibold" : "text-ink-soft")}>
             <Bell size={20} /> notifications <UnreadPill />
           </Link>
-          <Link href="/wallet" className={cx("flex items-center gap-3 rounded-xl px-3 py-2.5 text-[15px] font-medium hover:bg-black/5", isActive(path, "/wallet") ? "bg-black/[.05] font-semibold" : "text-ink-soft")}>
+          <Link href="/wallet" className={cx("flex items-center gap-3 rounded-xl px-3 py-2.5 text-[15px] font-medium hover:bg-ink/5", isActive(path, "/wallet") ? "bg-ink/[.05] font-semibold" : "text-ink-soft")}>
             <Wallet size={20} /> wallet
           </Link>
         </nav>
         <Link href="/duel/new" className="btn-primary mt-6 w-full"><Plus size={18} /> start a beef</Link>
         <div className="mt-auto">
           {me ? (
-            <Link href="/profile" className="flex items-center gap-3 rounded-xl p-2 hover:bg-black/5">
+            <Link href="/profile" className="flex items-center gap-3 rounded-xl p-2 hover:bg-ink/5">
               <Avatar user={me} size={36} />
               <div className="min-w-0"><p className="truncate text-sm font-semibold">{me.displayName}</p><p className="truncate text-xs text-muted">@{me.username}</p></div>
             </Link>
           ) : (
             <Link href="/auth/sign-in" className="btn-outline w-full">sign in</Link>
           )}
-          <div className="mt-3 px-2"><SimBadge label="base sepolia · testnet" /></div>
+          <div className="mt-3 flex items-center justify-between px-2"><SimBadge label="base sepolia · testnet" /><ThemeToggle className="!h-9 !w-9" /></div>
         </div>
       </aside>
 
@@ -103,7 +104,8 @@ export function AppShell({ children }: { children: ReactNode }) {
           <header className="sticky top-0 z-30 flex items-center justify-between border-b bg-bg/90 px-4 pt-safe backdrop-blur lg:hidden">
             <div className="flex h-14 items-center"><Logo size={26} /></div>
             <div className="flex items-center">
-              <Link href="/wallet" className="inline-flex h-11 w-11 items-center justify-center rounded-full hover:bg-black/5" aria-label="wallet"><Wallet size={21} /></Link>
+              <ThemeToggle />
+              <Link href="/wallet" className="inline-flex h-11 w-11 items-center justify-center rounded-full hover:bg-ink/5" aria-label="wallet"><Wallet size={21} /></Link>
               <BellLink />
             </div>
           </header>
@@ -120,7 +122,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             if (href === "/duel") {
               return (
                 <Link key={href} href="/duel" className="flex flex-col items-center justify-center" aria-current={active ? "page" : undefined} aria-label="duel">
-                  <span className={cx("flex h-11 w-11 items-center justify-center rounded-2xl text-white shadow-card transition", active ? "bg-brand-dark" : "bg-brand")}><Swords size={22} /></span>
+                  <span className={cx("flex h-11 w-11 items-center justify-center rounded-2xl text-white shadow-card transition", active ? "bg-brand brightness-90" : "bg-brand")}><Swords size={22} /></span>
                 </Link>
               );
             }

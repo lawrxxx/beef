@@ -32,11 +32,12 @@ function Inner({ stakeUnits, onStatus }: { stakeUnits: bigint | null; onStatus: 
   }, []);
 
   // coming back from the faucet tab: read the chain again
+  const { refreshBalance } = w;
   useEffect(() => {
-    const onFocus = () => void w.refreshBalance();
+    const onFocus = () => void refreshBalance();
     window.addEventListener("focus", onFocus);
     return () => window.removeEventListener("focus", onFocus);
-  }, [w.refreshBalance]);
+  }, [refreshBalance]);
 
   const units = w.balance.units;
   const connected = w.isSignedIn && !!w.smartAccount;

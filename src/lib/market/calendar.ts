@@ -105,14 +105,14 @@ export function prevTradingDay(session: string): string {
 
 /** last session whose official close is at or before the instant */
 export function lastCloseAtOrBefore(at: Date): string {
-  let s = sessionDateOf(at);
+  const s = sessionDateOf(at);
   if (isTradingDay(s) && sessionCloseUtc(s).getTime() <= at.getTime()) return s;
   return prevTradingDay(s);
 }
 
 /** first session whose official close is strictly after the instant */
 export function nextCloseAfter(at: Date): string {
-  let s = sessionDateOf(at);
+  const s = sessionDateOf(at);
   if (isTradingDay(s) && sessionCloseUtc(s).getTime() > at.getTime()) return s;
   return nextTradingDay(s);
 }

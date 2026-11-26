@@ -8,7 +8,6 @@ import type { Duel } from "@/lib/types";
 import { useBeef } from "@/lib/store/store";
 import { useMe, useMounted } from "@/lib/hooks";
 import { canAccept, isParticipant } from "@/lib/derive";
-import { usd } from "@/lib/format";
 import { CardSkeleton, EmptyState, PageHeader, SimBadge, Tabs } from "@/components/ui";
 import { DuelCard } from "@/components/duel-card";
 

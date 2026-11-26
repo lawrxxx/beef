@@ -223,6 +223,18 @@ packages (pinned): `@coinbase/cdp-hooks@0.0.130`, `@coinbase/cdp-core@0.0.130` (
   - `0xAe3a647029a7A3Fedf10F12dC7bbd098a5bf9F88`: first deployment, fixed 25 usdc cap (still holds the first test duel)
   - `0x760cfec066c424deef2bcb54ac2ce287d9ba0eff`: configurable limits, 1–1000 test usdc
 
+## light & dark mode
+
+- **choices:** light, dark or system, in profile → settings → appearance. There's also a toggle in the mobile header, the desktop sidebar, and the welcome, sign-in and onboarding screens.
+- **colours:** every colour is a css variable (`src/app/globals.css`) that tailwind reads (`rgb(var(--x) / alpha)`), so components carry no per-theme classes.
+  - light is the original palette, unchanged
+  - dark is charcoal (`#121214` background, `#1C1C1F` cards) with the same orange
+  - green, red and grey keep their meanings in both themes, and returns always show a +/− sign, so they don't rely on colour alone
+- **no flash:** a small script in `<head>` (`src/lib/theme-script.ts`) applies the saved choice before first paint, so there's no flash and no hydration mismatch.
+- **persistence:** the choice is saved in `localStorage` (works signed out). When signed in, it's also saved in the supabase user's metadata, so a new device picks it up.
+- **browser chrome:** `theme-color` meta tags follow the device, or the explicit choice. the manifest's colours are static (light) by spec.
+- **ios pwa:** the status bar style stays `default`.
+
 ## pwa
 
 - `src/app/manifest.ts`: standalone display, theme/background colours, 192/512 + maskable icons, shortcuts.

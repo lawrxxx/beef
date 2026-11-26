@@ -103,7 +103,7 @@ export function WalletConnect() {
   return (
     <div className="card p-4">
       <div className="mb-3 flex items-center gap-3">
-        <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-black/[.05]"><Wallet size={20} /></span>
+        <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-ink/[.05]"><Wallet size={20} /></span>
         <div>
           <p className="font-semibold">your beef wallet</p>
           <p className="text-[13px] text-muted">a {NETWORK_NAME} wallet for test usdc. no app, no extension, no seed phrase.</p>
@@ -165,7 +165,7 @@ export function Balances() {
     <div className="card overflow-hidden">
       <div className="flex items-center justify-between border-b px-4 py-3">
         <span className="flex items-center gap-2 text-sm font-semibold"><span className="h-2 w-2 rounded-full bg-gain" /> wallet connected</span>
-        <span className="rounded-full bg-black/[.05] px-2 py-0.5 text-[11px] font-semibold text-ink-soft">{NETWORK_NAME} · testnet</span>
+        <span className="rounded-full bg-ink/[.05] px-2 py-0.5 text-[11px] font-semibold text-ink-soft">{NETWORK_NAME} · testnet</span>
       </div>
       <div className="grid grid-cols-3 divide-x text-center">
         {[

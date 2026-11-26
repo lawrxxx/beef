@@ -1,5 +1,6 @@
 "use client";
 
+import { ThemeToggle } from "@/components/theme-controls";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
@@ -88,7 +89,7 @@ function ProfileStep({ onDone }: { onDone: () => void }) {
             if (url) setAvatar(url);
           }} />
         </div>
-        <div className="mt-3 flex flex-wrap gap-1.5">{AVATAR_EMOJIS.map((x) => <button type="button" key={x} onClick={() => setAvatar(x)} className={cx("flex h-9 w-9 items-center justify-center rounded-full text-lg", avatar === x ? "ring-2 ring-ink" : "bg-black/[.04]")} aria-label={`avatar ${x}`}>{x}</button>)}</div>
+        <div className="mt-3 flex flex-wrap gap-1.5">{AVATAR_EMOJIS.map((x) => <button type="button" key={x} onClick={() => setAvatar(x)} className={cx("flex h-9 w-9 items-center justify-center rounded-full text-lg", avatar === x ? "ring-2 ring-ink" : "bg-ink/[.04]")} aria-label={`avatar ${x}`}>{x}</button>)}</div>
         <div className="mt-2 flex gap-1.5">{AVATAR_COLORS.map((c) => <button type="button" key={c} onClick={() => setColor(c)} className={cx("h-7 w-7 rounded-full border", color === c && "ring-2 ring-ink ring-offset-2")} style={{ background: c }} aria-label={`colour ${c}`} />)}</div>
       </div>
       <div>
@@ -122,9 +123,9 @@ export default function OnboardingPage() {
     <div className="flex min-h-dvh flex-col py-6">
       <div className="flex items-center justify-between">
         {idx > 1 ? <button className="btn-ghost btn-sm -ml-2 !px-2" onClick={() => setStep(ORDER[idx - 1])} aria-label="back"><ArrowLeft size={20} /></button> : <Logo size={24} />}
-        <button className="text-sm text-muted underline" onClick={() => void signOut().then(() => router.push("/"))}>sign out</button>
+        <span className="flex items-center gap-1"><ThemeToggle /><button className="text-sm text-muted underline" onClick={() => void signOut().then(() => router.push("/"))}>sign out</button></span>
       </div>
-      <div className="mt-4 flex gap-1" aria-hidden>{[0, 1, 2, 3, 4].map((i) => <div key={i} className={cx("h-1 flex-1 rounded-full", i <= idx + 1 ? "bg-ink" : "bg-black/10")} />)}</div>
+      <div className="mt-4 flex gap-1" aria-hidden>{[0, 1, 2, 3, 4].map((i) => <div key={i} className={cx("h-1 flex-1 rounded-full", i <= idx + 1 ? "bg-ink" : "bg-ink/10")} />)}</div>
       <p className="mt-6 text-xs font-semibold text-muted">step {idx + 2} of 5</p>
       <h1 className="font-display text-[26px] font-bold leading-tight tracking-tight">{COPY[step][0]}</h1>
       <p className="mt-1 text-[15px] text-muted">{COPY[step][1]}</p>

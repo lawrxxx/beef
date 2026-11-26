@@ -6,6 +6,8 @@ export default function OfflinePage() {
       <div className="text-5xl">📡</div>
       <h1 className="mt-4 font-display text-2xl font-bold">you're offline</h1>
       <p className="mt-2 max-w-xs text-[15px] text-muted">beef needs a connection for prices and duels. your data is safe. we'll pick up where you left off.</p>
+      {/* a full page load on purpose: retrying from the offline page must hit the network, not the client router */}
+      {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
       <a href="/" className="btn-dark mt-6">try again</a>
     </div>
   );

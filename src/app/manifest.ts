@@ -10,6 +10,7 @@ export default function manifest(): MetadataRoute.Manifest {
     scope: "/",
     display: "standalone",
     orientation: "portrait",
+    // static per the manifest spec; the live page sets theme-color for light/dark (see lib/theme.ts)
     background_color: "#F6F5F2",
     theme_color: "#F6F5F2",
     categories: ["social", "finance", "entertainment"],

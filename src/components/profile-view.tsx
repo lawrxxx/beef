@@ -1,5 +1,6 @@
 "use client";
 
+import { ThemeSelector } from "@/components/theme-controls";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { LogOut, Pencil, Settings, Share2, Swords, Download } from "lucide-react";
@@ -7,7 +8,7 @@ import type { User } from "@/lib/types";
 import { signOut, useBeef } from "@/lib/store/store";
 import { achievementsFor, correctPicks, rivalsOf, statsFor, useMounted } from "@/lib/hooks";
 import { cx } from "@/lib/format";
-import { Avatar, CardSkeleton, Section, SimBadge, Tabs, TickerTag, useAction, Sheet } from "@/components/ui";
+import { Avatar, CardSkeleton, SimBadge, Tabs, TickerTag, useAction, Sheet } from "@/components/ui";
 import { DuelCard } from "@/components/duel-card";
 import { FollowButton, PostCard, UserRow } from "@/components/social";
 import { shareLink } from "@/components/share";
@@ -98,7 +99,7 @@ export function ProfileView({ user }: { user: User }) {
             {rivals.map((r) => {
               const o = s.users.find((u) => u.id === r.opponentId)!;
               return (
-                <Link key={r.opponentId} href={`/rivalry/${o.username}${isMe ? "" : `?a=${user.username}`}`} className="flex items-center gap-3 px-4 py-3 hover:bg-black/[.02]">
+                <Link key={r.opponentId} href={`/rivalry/${o.username}${isMe ? "" : `?a=${user.username}`}`} className="flex items-center gap-3 px-4 py-3 hover:bg-ink/[.02]">
                   <Avatar user={o} size={40} />
                   <div className="min-w-0 flex-1"><p className="font-semibold">vs {o.displayName}</p><p className="text-[13px] text-muted">{r.duels.length} duels{r.streak.count > 1 ? ` · ${r.streak.who === "me" ? user.displayName.split(" ")[0] : o.displayName.split(" ")[0]} won ${r.streak.count} straight` : ""}</p></div>
                   <p className="num font-display text-lg font-bold">{r.wins}–{r.losses}{r.draws ? `–${r.draws}` : ""}</p>
@@ -128,6 +129,11 @@ export function ProfileView({ user }: { user: User }) {
       <Sheet open={settings} onClose={() => setSettings(false)} title="settings">
         <div className="space-y-2">
           <p className="text-sm text-muted">signed in as {s.session.email}</p>
+          <div className="pb-2">
+            <p className="label">appearance</p>
+            <ThemeSelector />
+            <p className="mt-1 text-xs text-muted">system follows your device. your choice is saved to your account.</p>
+          </div>
           <button className="btn-outline w-full justify-start" onClick={() => shareLink(`/?ref=${user.username}`, "i'm on beef: friendly stock duels with friends. join me and let's settle an argument.")}><Share2 size={17} /> invite friends</button>
           {!install.installed && (
             <button className="btn-outline w-full justify-start" onClick={async () => { if (install.canPrompt) await install.prompt(); else setIosGuide(true); }}>

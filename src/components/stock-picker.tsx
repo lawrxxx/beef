@@ -34,9 +34,9 @@ export function StockPicker({ value, onChange, exclude = [], label }: { value?: 
                 aria-selected={sel}
                 disabled={disabled}
                 onClick={() => onChange(a.ticker)}
-                className={cx("flex w-full items-center gap-3 px-3.5 py-3 text-left transition disabled:opacity-40", sel ? "bg-black/[.04]" : "hover:bg-black/[.02]")}
+                className={cx("flex w-full items-center gap-3 px-3.5 py-3 text-left transition disabled:opacity-40", sel ? "bg-ink/[.04]" : "hover:bg-ink/[.02]")}
               >
-                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-black/[.05] text-[11px] font-extrabold">{a.ticker.slice(0, 4)}</span>
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-ink/[.05] text-[11px] font-extrabold">{a.ticker.slice(0, 4)}</span>
                 <span className="min-w-0 flex-1">
                   <span className="block text-[15px] font-semibold">{a.ticker}</span>
                   <span className="block truncate text-[13px] text-muted">{a.name}{disabled ? " · already picked" : ""}</span>

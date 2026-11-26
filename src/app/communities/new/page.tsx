@@ -34,7 +34,7 @@ export default function NewCommunityPage() {
       }}>
         <div><label className="label" htmlFor="cn">name</label><input id="cn" className="input" value={name} onChange={(e) => setName(e.target.value)} maxLength={40} placeholder="e.g. ev stocks" required /></div>
         <div><label className="label" htmlFor="cd">what's it about?</label><textarea id="cd" className="input min-h-[84px] resize-none" value={description} onChange={(e) => setDescription(e.target.value)} maxLength={200} /></div>
-        <div><p className="label">icon</p><div className="flex flex-wrap gap-1.5">{EMOJIS.map((x) => <button type="button" key={x} onClick={() => setEmoji(x)} className={cx("flex h-10 w-10 items-center justify-center rounded-xl text-xl", emoji === x ? "ring-2 ring-ink" : "bg-black/[.04]")}>{x}</button>)}</div></div>
+        <div><p className="label">icon</p><div className="flex flex-wrap gap-1.5">{EMOJIS.map((x) => <button type="button" key={x} onClick={() => setEmoji(x)} className={cx("flex h-10 w-10 items-center justify-center rounded-xl text-xl", emoji === x ? "ring-2 ring-ink" : "bg-ink/[.04]")}>{x}</button>)}</div></div>
         <div><p className="label">focus stocks</p><div className="flex flex-wrap gap-1.5">{ASSETS.map((a) => { const on = tickers.includes(a.ticker); return <button type="button" key={a.ticker} className={cx("chip", on && "chip-active")} onClick={() => setTickers(on ? tickers.filter((t) => t !== a.ticker) : [...tickers, a.ticker].slice(0, 8))}>{a.ticker}</button>; })}</div></div>
         <button className="btn-primary w-full" disabled={name.trim().length < 3}>create</button>
       </form>

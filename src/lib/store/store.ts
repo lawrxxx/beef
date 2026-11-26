@@ -1,5 +1,6 @@
 "use client";
 
+import { adoptAccountPref } from "@/lib/theme";
 import { STAKE_MAX, STAKE_MIN, stakeWithinLimits } from "@/lib/stake";
 import { useSyncExternalStore } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -103,7 +104,11 @@ export function loadPersisted() {
   void (async () => {
     const { sb, be } = await backend();
     if (!sb) { loaded = true; emit(); return; }
-    sb.auth.onAuthStateChange((event) => { if (event !== "INITIAL_SESSION" && event !== "TOKEN_REFRESHED") void reloadRemote(); });
+    sb.auth.onAuthStateChange((event, session) => {
+      // appearance follows the account to new devices (only when this browser has no explicit choice)
+      if (session?.user) adoptAccountPref(session.user.user_metadata?.theme);
+      if (event !== "INITIAL_SESSION" && event !== "TOKEN_REFRESHED") void reloadRemote();
+    });
     be.subscribe(sb, () => void reloadRemote());
     await reloadRemote();
   })();

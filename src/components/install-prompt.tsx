@@ -60,9 +60,9 @@ export function IOSGuide() {
     <div className="space-y-4">
       <p className="text-[15px] text-ink-soft">want beef on your home screen?</p>
       <ol className="space-y-3 text-[15px]">
-        <li className="flex items-center gap-3"><span className="flex h-9 w-9 items-center justify-center rounded-full bg-black/5"><Share size={18} /></span>tap <b>share</b> in safari's toolbar</li>
-        <li className="flex items-center gap-3"><span className="flex h-9 w-9 items-center justify-center rounded-full bg-black/5"><SquarePlus size={18} /></span>select <b>add to home screen</b></li>
-        <li className="flex items-center gap-3"><span className="flex h-9 w-9 items-center justify-center rounded-full bg-black/5">🥩</span>open beef from your home screen</li>
+        <li className="flex items-center gap-3"><span className="flex h-9 w-9 items-center justify-center rounded-full bg-ink/5"><Share size={18} /></span>tap <b>share</b> in safari's toolbar</li>
+        <li className="flex items-center gap-3"><span className="flex h-9 w-9 items-center justify-center rounded-full bg-ink/5"><SquarePlus size={18} /></span>select <b>add to home screen</b></li>
+        <li className="flex items-center gap-3"><span className="flex h-9 w-9 items-center justify-center rounded-full bg-ink/5">🥩</span>open beef from your home screen</li>
       </ol>
     </div>
   );

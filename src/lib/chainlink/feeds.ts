@@ -50,6 +50,14 @@ export const FEEDS_METHODOLOGY = {
 } as const;
 
 type Round = { roundId: bigint; answer: bigint; updatedAt: bigint };
+
+/** user-facing reason for a failed read: short, no rpc urls or request bodies (full error goes to the server log) */
+function readError(e: unknown): string {
+  console.error("[chainlink feeds]", e instanceof Error ? e.message.split("\n")[0] : e);
+  const m = e instanceof Error ? e.message : "";
+  if (/describes itself|decimals, expected/.test(m)) return m;
+  return "couldn't reach chainlink's feed on base right now";
+}
 export type FeedClient = Pick<PublicClient, "readContract" | "multicall">;
 
 /** 8-decimal feed answer → 18-decimal price used everywhere else */
@@ -137,7 +145,7 @@ export class ChainlinkFeedPrices {
         reason: status === "stale" ? "the feed hasn't updated within its 24-hour heartbeat" : status === "closed" ? "market closed: last feed value" : "chainlink feed (updates on a 0.5% move)",
       };
     } catch (e) {
-      return { ...base, reason: e instanceof Error ? e.message : "couldn't read the chainlink feed" };
+      return { ...base, reason: readError(e) };
     }
   }
 
@@ -149,9 +157,9 @@ export class ChainlinkFeedPrices {
     const t = ticker.toUpperCase() as SupportedTicker;
     if (referenceTimestamp * 1000 > this.now().getTime()) return { ...out, problems: [`${t}: the ${session} close hasn't happened yet`] };
     let feed: Address;
-    try { feed = await this.feedFor(t); } catch (e) { return { ...out, problems: [`${t}: ${e instanceof Error ? e.message : "feed check failed"}`] }; }
+    try { feed = await this.feedFor(t); } catch (e) { return { ...out, problems: [`${t}: ${readError(e)}`] }; }
     let r: Round | null;
-    try { r = await this.roundAtOrBefore(feed, referenceTimestamp); } catch (e) { return { ...out, streamId: feed, problems: [`${t}: couldn't read feed history (${e instanceof Error ? e.message : "rpc error"})`] }; }
+    try { r = await this.roundAtOrBefore(feed, referenceTimestamp); } catch (e) { return { ...out, streamId: feed, problems: [`${t}: couldn't read feed history (${readError(e)})`] }; }
     if (!r) return { ...out, streamId: feed, problems: [`${t}: no chainlink feed round at or before ${closeUtc.toISOString()}`] };
     const problems: string[] = [];
     if (r.answer <= 0n) problems.push(`${t}: feed value isn't positive`);

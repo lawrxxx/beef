@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useState } from "react";
 import {
-  AlertTriangle, ArrowLeft, CheckCircle2, ChevronDown, Clock, Crown, FastForward, FileText, Image as ImageIcon,
+  AlertTriangle, ArrowLeft, CheckCircle2, ChevronDown, Clock, Crown, FileText, Image as ImageIcon,
   Lock, RefreshCw, Repeat, Share2, ShieldCheck, Swords,
 } from "lucide-react";
 import type { Duel } from "@/lib/types";
@@ -14,7 +14,7 @@ import {
 } from "@/lib/store/store";
 import { livePerformance, useMe, useMounted, useNow, useQuotes, userById } from "@/lib/hooks";
 import { canAccept, isParticipant, STATUS_LABEL } from "@/lib/derive";
-import { countdown, cx, marketTime, price, sessionLabel, usd } from "@/lib/format";
+import { countdown, cx, marketTime, price, sessionLabel} from "@/lib/format";
 import { resolveEndSession, sessionCloseUtc, sessionDateOf } from "@/lib/market/calendar";
 import { txUrl } from "@/lib/chain/config";
 import { Avatar, CardSkeleton, EmptyState, Pct, QuoteLine, SourceBadge, UserLink, useAction } from "@/components/ui";
@@ -45,7 +45,6 @@ function DuelView({ d }: { d: Duel }) {
   const now = useNow(1000);
   const [busy, setBusy] = useState(false);
   const [showTerms, setShowTerms] = useState(false);
-  const [agree, setAgree] = useState(false);
   const live = d.status === "active";
   const showQuotes = live || d.status === "pending" || d.status === "accepted";
   const { quotes, error: quoteError } = useQuotes(showQuotes ? d.participants.map((p) => p.ticker) : [], 15_000);
@@ -81,7 +80,7 @@ function DuelView({ d }: { d: Duel }) {
       {/* hero */}
       <div className="card overflow-hidden">
         {done && (
-          <div className={cx("px-4 py-3 text-center text-sm font-semibold", st.status === "draw" ? "bg-black/[.04]" : "bg-gold-soft text-gold")}>
+          <div className={cx("px-4 py-3 text-center text-sm font-semibold", st.status === "draw" ? "bg-ink/[.04]" : "bg-gold-soft text-gold")}>
             {st.status === "draw" ? "🤝 a dead heat. stakes returned." : `🏆 ${st.winners.map((w) => usersMap[w]?.displayName ?? "?").join(" & ")} ${st.winners.length > 1 ? "win" : "wins"} ${formatUsdc(potUnits / BigInt(Math.max(1, st.winners.length)))} test usdc`}
           </div>
         )}
@@ -220,7 +219,7 @@ function DuelView({ d }: { d: Duel }) {
               </tbody>
             </table>
           </div>
-          <div className="space-y-1 border-t bg-black/[.015] px-4 py-3 text-xs text-muted">
+          <div className="space-y-1 border-t bg-ink/[.015] px-4 py-3 text-xs text-muted">
             {d.startSnapshots[0] && <p>start: chainlink price at the {sessionLabel(d.startSnapshots[0].session)} close · {marketTime(d.startSnapshots[0].timestamp)}</p>}
             {d.endSnapshots[0] ? <p>end: chainlink price at the {sessionLabel(d.endSnapshots[0].session)} close · {marketTime(d.endSnapshots[0].timestamp)}</p> : endSession && <p>end: chainlink price at the {sessionLabel(endSession)} close · {marketTime(sessionCloseUtc(endSession).toISOString())}</p>}
             {[...d.startSnapshots, ...d.endSnapshots].filter((x) => x.streamId).map((x) => (

@@ -123,7 +123,7 @@ function Inner({ d }: { d: Duel }) {
     <div className="card mt-4 p-4">
       <div className="flex items-center justify-between">
         <p className="flex items-center gap-2 font-semibold"><Lock size={16} /> stakes</p>
-        <span className="rounded-full bg-black/[.05] px-2 py-0.5 text-[11px] font-semibold text-ink-soft">{NETWORK_NAME} · test usdc</span>
+        <span className="rounded-full bg-ink/[.05] px-2 py-0.5 text-[11px] font-semibold text-ink-soft">{NETWORK_NAME} · test usdc</span>
       </div>
       {error ? <p className="mt-1 text-sm text-loss">{error}</p> : (
         <p className="mt-1 text-[13px] text-muted">
@@ -174,7 +174,7 @@ function Inner({ d }: { d: Duel }) {
         </div>
         {moves && (
           <label className="mt-3 flex items-start gap-3 text-sm text-ink-soft">
-            <input type="checkbox" className="mt-0.5 h-5 w-5 accent-[#1D1D1F]" checked={agree} onChange={(e) => setAgree(e.target.checked)} />
+            <input type="checkbox" className="mt-0.5 h-5 w-5 accent-ink" checked={agree} onChange={(e) => setAgree(e.target.checked)} />
             <span>i authorise the beef escrow to take exactly {stake} test usdc from my wallet for this duel. it's a one-time approval for this amount only.</span>
           </label>
         )}

@@ -41,7 +41,7 @@ export function ProfileFields({ draft, setDraft, userId, fields = ["avatar", "us
           </div>
           {uploadErr && <p className="mt-1 text-sm text-loss">{uploadErr}</p>}
           <div className="mt-3 flex flex-wrap gap-1.5">
-            {AVATAR_EMOJIS.map((e) => <button type="button" key={e} onClick={() => set({ avatar: e })} className={cx("flex h-10 w-10 items-center justify-center rounded-full text-xl", draft.avatar === e ? "ring-2 ring-ink" : "bg-black/[.04]")} aria-label={`avatar ${e}`}>{e}</button>)}
+            {AVATAR_EMOJIS.map((e) => <button type="button" key={e} onClick={() => set({ avatar: e })} className={cx("flex h-10 w-10 items-center justify-center rounded-full text-xl", draft.avatar === e ? "ring-2 ring-ink" : "bg-ink/[.04]")} aria-label={`avatar ${e}`}>{e}</button>)}
           </div>
           <div className="mt-2 flex gap-1.5">
             {AVATAR_COLORS.map((c) => <button type="button" key={c} onClick={() => set({ avatarColor: c })} className={cx("h-8 w-8 rounded-full border", draft.avatarColor === c && "ring-2 ring-ink ring-offset-2")} style={{ background: c }} aria-label={`colour ${c}`} />)}

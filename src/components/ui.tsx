@@ -15,7 +15,7 @@ export function Avatar({ user, size = 40, ring }: { user?: User | null; size?: n
   return (
     <span
       className={cx("inline-flex shrink-0 items-center justify-center overflow-hidden rounded-full", ring && "ring-2 ring-white")}
-      style={{ width: size, height: size, background: user?.avatarColor ?? "#EEE", fontSize: size * 0.5 }}
+      style={{ width: size, height: size, background: user?.avatarColor ?? "rgb(var(--line))", fontSize: size * 0.5 }}
       aria-hidden
     >
       {isImg ? <img src={user!.avatar} alt="" className="h-full w-full object-cover" /> : user?.avatar ?? "👤"}
@@ -60,7 +60,7 @@ export function SimBadge({ className, label = "testnet" }: { className?: string;
 /** stock prices come only from chainlink data streams */
 export function SourceBadge({ className }: { className?: string }) {
   return (
-    <span className={cx("inline-flex items-center gap-1 rounded-full bg-[#375BD2]/10 px-2 py-0.5 text-[11px] font-semibold text-[#375BD2]", className)} title="prices: chainlink data streams, 24/5 us equities">
+    <span className={cx("inline-flex items-center gap-1 rounded-full bg-chainlink/10 px-2 py-0.5 text-[11px] font-semibold text-chainlink", className)} title="prices: chainlink data streams, 24/5 us equities">
       chainlink
     </span>
   );
@@ -114,7 +114,7 @@ export function Section({ title, action, children, className }: { title: string;
 export function EmptyState({ icon, title, body, action }: { icon: ReactNode; title: string; body?: string; action?: ReactNode }) {
   return (
     <div className="card flex flex-col items-center px-6 py-10 text-center">
-      <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-black/[.04] text-muted">{icon}</div>
+      <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-ink/[.04] text-muted">{icon}</div>
       <p className="font-semibold">{title}</p>
       {body && <p className="mt-1 max-w-xs text-sm text-muted">{body}</p>}
       {action && <div className="mt-4">{action}</div>}
@@ -167,7 +167,7 @@ export function Sheet({ open, onClose, title, children }: { open: boolean; onClo
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center" role="dialog" aria-modal aria-label={title}>
-      <button aria-label="close" className="absolute inset-0 bg-black/30" onClick={onClose} />
+      <button aria-label="close" className="absolute inset-0 bg-black/30 dark:bg-black/60" onClick={onClose} />
       <div ref={ref} tabIndex={-1} className="relative max-h-[88dvh] w-full max-w-md animate-fade-up overflow-y-auto rounded-t-3xl bg-surface p-5 pb-safe shadow-pop sm:rounded-3xl">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-lg font-bold">{title}</h2>
@@ -202,7 +202,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       {children}
       <div className="pointer-events-none fixed inset-x-0 top-0 z-[60] flex flex-col items-center gap-2 px-4 pt-safe" aria-live="polite">
         {toasts.map((t) => (
-          <div key={t.id} className="pointer-events-auto mt-3 flex max-w-sm animate-fade-up items-center gap-2 rounded-full bg-ink px-4 py-2.5 text-sm font-medium text-white shadow-pop">
+          <div key={t.id} className="pointer-events-auto mt-3 flex max-w-sm animate-fade-up items-center gap-2 rounded-full bg-ink px-4 py-2.5 text-sm font-medium text-inverse shadow-pop">
             {t.kind === "success" ? <CheckCircle2 size={16} className="text-gain" /> : t.kind === "error" ? <XCircle size={16} className="text-loss" /> : <Info size={16} />}
             {t.text}
           </div>

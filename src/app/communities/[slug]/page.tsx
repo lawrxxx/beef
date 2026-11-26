@@ -35,7 +35,7 @@ export default function CommunityPage() {
       <Link href="/communities" className="btn-ghost btn-sm -ml-2 mb-2 !px-2"><ArrowLeft size={18} /> communities</Link>
       <div className="card p-5">
         <div className="flex items-start gap-4">
-          <span className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-black/[.04] text-4xl">{c.emoji}</span>
+          <span className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-ink/[.04] text-4xl">{c.emoji}</span>
           <div className="min-w-0 flex-1">
             <h1 className="font-display text-2xl font-bold">{c.name}</h1>
             <p className="text-sm text-muted">{members.length} members</p>
