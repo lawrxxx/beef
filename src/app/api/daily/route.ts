@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getAsset } from "@/lib/market/assets";
 import { prevTradingDay, sessionCloseUtc } from "@/lib/market/calendar";
 import { returnE6, returnPctNumber } from "@/lib/settlement/engine";
-import { chainlinkPrices } from "@/lib/server/chainlink";
+import { PRICE_SOURCE, chainlinkPrices } from "@/lib/server/chainlink";
 import { clientKey, rateLimit } from "@/lib/server/rate-limit";
 
 export const dynamic = "force-dynamic";
@@ -16,7 +16,7 @@ export async function GET(req: Request) {
   const rl = rateLimit(clientKey(req, "daily"), 20, 60_000);
   if (!rl.ok) return NextResponse.json({ error: "rate limited" }, { status: 429 });
   const prices = chainlinkPrices();
-  if (!prices) return NextResponse.json({ provider: "chainlink-data-streams", available: false, results: {} });
+  if (!prices) return NextResponse.json({ provider: PRICE_SOURCE === "data_feeds" ? "chainlink-data-feeds" : "chainlink-data-streams", available: false, results: {} });
   const sp = new URL(req.url).searchParams;
   const items = (sp.get("m") ?? "").split(";").slice(0, 3).map((x) => x.split(",")).filter((x) => x.length === 3);
   const now = Date.now();
@@ -32,5 +32,5 @@ export async function GET(req: Request) {
       [b]: returnPctNumber(returnE6(refs[2].price!.mid, refs[3].price!.mid)),
     };
   }
-  return NextResponse.json({ provider: "chainlink-data-streams", available: true, results: out });
+  return NextResponse.json({ provider: PRICE_SOURCE === "data_feeds" ? "chainlink-data-feeds" : "chainlink-data-streams", available: true, results: out });
 }
