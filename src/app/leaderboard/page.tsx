@@ -52,19 +52,20 @@ export default function LeaderboardPage() {
   const fmt = (v: number) => (metric === "winrate" ? `${v.toFixed(0)}%` : String(Math.round(v)));
 
   const Row = ({ r, rank, pinned }: { r: (typeof ranked)[number]; rank: number; pinned?: boolean }) => (
-    <Link href={`/u/${r.u.username}`} className={cx("flex items-center gap-3 px-4 py-3 hover:bg-ink/[.02]", r.u.id === me && "bg-brand-soft/60", pinned && "border-t-2 border-dashed")}>
-      <span className={cx("num w-7 text-center font-display text-lg font-bold", rank > 3 && "text-faint")}>{rank <= 3 ? ["🥇", "🥈", "🥉"][rank - 1] : rank}</span>
-      <Avatar user={r.u} size={40} />
+    <Link href={`/u/${r.u.username}`} className={cx("relative flex items-center gap-3 hover:bg-ink/[.03]", rank === 1 ? "py-5" : "py-3", pinned && "border-t-2 border-dashed border-ink/40")}>
+      {r.u.id === me && <span className="absolute inset-y-2 -left-4 w-[3px] bg-ink" aria-hidden />}
+      <span className={cx("display-cond num w-11 shrink-0 text-right font-bold leading-none tracking-[-0.03em]", rank === 1 ? "text-[64px] text-brand" : rank <= 3 ? "text-[44px] text-ink" : "text-[30px] text-faint")}>{rank}</span>
+      <Avatar user={r.u} size={rank === 1 ? 48 : 38} />
       <div className="min-w-0 flex-1">
-        <p className="truncate font-semibold">{r.u.displayName}{r.u.id === me && <span className="font-normal text-muted"> (you)</span>}</p>
+        <p className={cx("truncate font-semibold", rank === 1 && "font-display text-[20px] font-bold tracking-[-0.02em]")}>{r.u.displayName}{r.u.id === me && <span className="font-normal text-muted"> (you)</span>}</p>
         <p className="num flex items-center gap-1 truncate text-[13px] text-muted">
           {r.st.wins}–{r.st.losses}{r.st.draws ? `–${r.st.draws}` : ""} · {r.st.completed ? `${r.st.winRate.toFixed(0)}% win` : "no results"}
           {r.st.streak > 1 && <span className="inline-flex items-center gap-0.5 text-brand-dark">· <Flame size={12} />{r.st.streak}</span>}
         </p>
       </div>
       <div className="text-right">
-        <p className="num font-display text-lg font-bold">{fmt(r.value)}</p>
-        <p className="text-[11px] text-muted">{METRICS.find((m) => m.value === metric)!.unit}</p>
+        <p className={cx("num display-cond font-bold leading-none", rank === 1 ? "text-[34px]" : "text-[24px]")}>{fmt(r.value)}</p>
+        <p className="mt-0.5 text-[10.5px] font-semibold uppercase tracking-[.1em] text-muted">{METRICS.find((m) => m.value === metric)!.unit}</p>
       </div>
     </Link>
   );
@@ -72,11 +73,11 @@ export default function LeaderboardPage() {
   return (
     <div>
       <PageHeader title="leaderboard" subtitle="who's actually right?" />
-      <Tabs<Period> value={period} onChange={setPeriod} options={PERIODS} className="mb-2" />
-      <div className="no-scrollbar -mx-4 mb-4 flex gap-4 overflow-x-auto border-b px-4" role="tablist" aria-label="category">
+      <Tabs<Period> value={period} onChange={setPeriod} options={PERIODS} className="mb-3" />
+      <div className="no-scrollbar -mx-4 mb-2 flex gap-1.5 overflow-x-auto px-4" role="tablist" aria-label="category">
         {METRICS.map((m) => (
           <button key={m.value} role="tab" aria-selected={metric === m.value} onClick={() => setMetric(m.value)}
-            className={cx("shrink-0 border-b-2 py-2.5 text-sm font-medium transition", metric === m.value ? "border-ink text-ink" : "border-transparent text-muted hover:text-ink")}>
+            className={cx("chip shrink-0 !min-h-8 !py-1 text-[13px]", metric === m.value && "chip-active")}>
             {m.label}
           </button>
         ))}
@@ -85,15 +86,15 @@ export default function LeaderboardPage() {
       {ranked.length === 0 ? (
         <EmptyState icon={<Trophy size={22} />} title="no results in this period yet" body="rankings fill up as duels settle." action={<Link href="/duel/new" className="btn-primary btn-sm">start a beef</Link>} />
       ) : (
-        <div className="card divide-y overflow-hidden">
+        <div className="divide-y border-y-2 border-ink">
           {ranked.slice(0, 10).map((r, i) => <Row key={r.u.id} r={r} rank={i + 1} />)}
           {myIdx >= 10 && <Row r={ranked[myIdx]} rank={myIdx + 1} pinned />}
         </div>
       )}
       {me && myIdx < 0 && ranked.length > 0 && <p className="mt-2 text-center text-[13px] text-muted">you're not ranked here yet{metric === "winrate" ? ` (needs ${minForWinRate} settled duels)` : ""}.</p>}
 
-      <div className="mt-4 flex items-start gap-2 rounded-xl bg-ink/[.03] p-3 text-[13px] text-ink-soft">
-        <Info size={16} className="mt-0.5 shrink-0" />
+      <div className="mt-5 flex items-start gap-2 text-[13px] leading-relaxed text-muted">
+        <Info size={15} className="mt-0.5 shrink-0" />
         <p>
           rankings use settled duels {period === "all" ? "since the start" : `from the last ${period === "week" ? "7" : "30"} days`}.
           beef score rewards consistency: win rate (weighted by how many duels you've played), completed duels, streaks and community activity.

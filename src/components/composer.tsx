@@ -43,7 +43,7 @@ export function Composer({ communityId, onPosted }: { communityId?: string; onPo
   };
 
   return (
-    <div className="card p-4">
+    <div className="border-b border-line py-4">
       <div className="flex gap-3">
         <Avatar user={me} size={40} />
         <textarea
@@ -56,7 +56,7 @@ export function Composer({ communityId, onPosted }: { communityId?: string; onPo
         />
       </div>
       {predict && (
-        <div className="mt-3 rounded-xl bg-ink/[.03] p-3">
+        <div className="mt-3 border-l-[3px] border-brand bg-sunken/50 p-3">
           <div className="flex items-center justify-between">
             <p className="text-sm font-semibold">prediction</p>
             <button className="btn-ghost btn-sm !h-8 !px-2" onClick={() => setPredict(false)} aria-label="remove prediction"><X size={16} /></button>
@@ -81,7 +81,7 @@ export function Composer({ communityId, onPosted }: { communityId?: string; onPo
         </button>
         <div className="flex items-center gap-2">
           <span className="num text-xs text-faint">{body.length}/500</span>
-          <button className="btn-primary btn-sm" disabled={!predict && !body.trim()} onClick={submit}>post</button>
+          <button className="btn-dark btn-sm" disabled={!predict && !body.trim()} onClick={submit}>post</button>
         </div>
       </div>
     </div>

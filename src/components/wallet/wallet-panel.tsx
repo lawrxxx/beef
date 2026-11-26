@@ -103,7 +103,7 @@ export function WalletConnect() {
   return (
     <div className="card p-4">
       <div className="mb-3 flex items-center gap-3">
-        <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-ink/[.05]"><Wallet size={20} /></span>
+        <span className="flex h-11 w-11 items-center justify-center rounded-md border border-line"><Wallet size={20} /></span>
         <div>
           <p className="font-semibold">your beef wallet</p>
           <p className="text-[13px] text-muted">a {NETWORK_NAME} wallet for test usdc. no app, no extension, no seed phrase.</p>
@@ -119,7 +119,7 @@ export function WalletConnect() {
 
 export function AddressRow({ address }: { address: string }) {
   return (
-    <div className="flex items-center justify-between gap-2 rounded-xl border px-3 py-2">
+    <div className="flex items-center justify-between gap-2 rounded-md border px-3 py-2">
       <span className="min-w-0 truncate font-mono text-[13px]" title={address}>{shortAddress(address)}</span>
       <span className="flex shrink-0 gap-1">
         <button className="btn-ghost btn-sm !h-8 !px-2" aria-label="copy address" onClick={async () => { await navigator.clipboard.writeText(address).catch(() => {}); toast("success", "address copied"); }}><Copy size={14} /> copy</button>
@@ -165,7 +165,7 @@ export function Balances() {
     <div className="card overflow-hidden">
       <div className="flex items-center justify-between border-b px-4 py-3">
         <span className="flex items-center gap-2 text-sm font-semibold"><span className="h-2 w-2 rounded-full bg-gain" /> wallet connected</span>
-        <span className="rounded-full bg-ink/[.05] px-2 py-0.5 text-[11px] font-semibold text-ink-soft">{NETWORK_NAME} · testnet</span>
+        <span className="text-[11px] font-semibold uppercase tracking-[.08em] text-muted">{NETWORK_NAME} · testnet</span>
       </div>
       <div className="grid grid-cols-3 divide-x text-center">
         {[
@@ -173,9 +173,9 @@ export function Balances() {
           ["in duels", w.balance.units == null ? null : w.balance.lockedUnits],
           ["total", w.balance.totalUnits],
         ].map(([k, v]) => (
-          <div key={k as string} className="px-2 py-3">
-            <p className="text-[11px] text-muted">{k}</p>
-            <p className="num font-display text-lg font-bold">{v == null ? (w.balance.loading ? "…" : "—") : formatUsdc(v as bigint)}</p>
+          <div key={k as string} className="px-2 py-3.5">
+            <p className="text-[10.5px] font-semibold uppercase tracking-[.12em] text-muted">{k}</p>
+            <p className="num display-cond mt-1 text-[28px] font-bold leading-none">{v == null ? (w.balance.loading ? "…" : "—") : formatUsdc(v as bigint)}</p>
             <p className="text-[10px] text-muted">test usdc</p>
           </div>
         ))}

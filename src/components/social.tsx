@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
-import { MessageCircle, Send, Share2, Swords, Trash2, TrendingUp } from "lucide-react";
+import { MessageCircle, Send, Share2, Swords, Trash2 } from "lucide-react";
 import type { Post, ReactionKind } from "@/lib/types";
 import { addComment, deleteComment, toggleFollow, toggleReaction, useBeef } from "@/lib/store/store";
 import { useMe, userById } from "@/lib/hooks";
@@ -27,7 +27,7 @@ export function ReactionBar({ targetType, targetId }: { targetType: "post" | "du
   const list = s.reactions.filter((r) => r.targetType === targetType && r.targetId === targetId);
   const mine = list.find((r) => r.userId === s.session.userId)?.kind;
   return (
-    <div className="flex flex-wrap gap-1.5">
+    <div className="-ml-1.5 flex flex-wrap gap-0.5">
       {REACTIONS.map((r) => {
         const n = list.filter((x) => x.kind === r.kind).length;
         return (
@@ -41,8 +41,8 @@ export function ReactionBar({ targetType, targetId }: { targetType: "post" | "du
               run(() => toggleReaction(targetType, targetId, r.kind));
             }}
             className={cx(
-              "inline-flex h-8 items-center gap-1 rounded-full border px-2.5 text-[13px] transition active:scale-95",
-              mine === r.kind ? "border-ink/20 bg-ink/[.06] font-semibold" : "border-line bg-surface hover:bg-ink/[.03]",
+              "inline-flex h-8 min-w-8 items-center justify-center gap-1 rounded-md px-1.5 text-[13px] transition active:scale-95",
+              mine === r.kind ? "bg-ink/[.08] font-semibold" : "opacity-80 grayscale-[.35] hover:bg-ink/[.05] hover:opacity-100 hover:grayscale-0",
             )}
           >
             <span aria-hidden>{r.emoji}</span>
@@ -106,7 +106,7 @@ export function FollowButton({ userId, small }: { userId: string; small?: boolea
   return (
     <button
       onClick={(e) => { e.preventDefault(); if (!me) return router.push("/auth/sign-in"); run(() => toggleFollow(userId)); }}
-      className={cx(following ? "btn-outline" : "btn-dark", small && "btn-sm")}
+      className={cx(small ? (following ? "btn-ghost text-muted" : "btn-outline") : following ? "btn-outline" : "btn-dark", small && "btn-sm")}
       aria-pressed={following}
     >
       {following ? "following" : "follow"}
@@ -132,7 +132,7 @@ export function PostCard({ post }: { post: Post }) {
   });
 
   return (
-    <article className="card p-4 animate-fade-up">
+    <article className="animate-fade-up border-b border-line py-4">
       <header className="flex items-start gap-3">
         <Link href={author ? `/u/${author.username}` : "#"}><Avatar user={author} size={40} /></Link>
         <div className="min-w-0 flex-1">
@@ -141,18 +141,19 @@ export function PostCard({ post }: { post: Post }) {
           </p>
           {community && <Link href={`/communities/${community.slug}`} className="text-[13px] text-muted hover:underline">{community.emoji} {community.name}</Link>}
         </div>
-        {post.kind === "result" && <span className="rounded-full bg-gold-soft px-2 py-0.5 text-[11px] font-semibold text-gold">result</span>}
-        {post.kind === "opinion" && <span className="rounded-full bg-brand-soft px-2 py-0.5 text-[11px] font-semibold text-brand-ink">prediction</span>}
+        {post.kind === "result" && <span className="kicker !text-gold">result</span>}
+        {post.kind === "opinion" && <span className="kicker">prediction</span>}
       </header>
 
-      <Link href={`/post/${post.id}`} className="mt-2 block whitespace-pre-wrap break-words text-[15px] leading-relaxed text-ink">{body}</Link>
+      <Link href={`/post/${post.id}`} className="mt-2 block whitespace-pre-wrap break-words text-[16px] leading-[1.5] text-ink">{body}</Link>
 
       {post.prediction && (
-        <div className="mt-3 flex items-center justify-between gap-3 rounded-xl bg-ink/[.03] p-3">
-          <div className="flex items-center gap-2 text-sm">
-            <TrendingUp size={16} className="text-gain" />
-            <TickerTag t={post.prediction.pick} /> <span className="text-muted">beats</span> <TickerTag t={post.prediction.versus} />
-            <span className="text-muted">· {post.prediction.horizon}</span>
+        <div className="mt-3 flex items-center justify-between gap-3 border-l-[3px] border-brand py-1 pl-3">
+          <div className="flex flex-wrap items-baseline gap-x-2 text-sm">
+            <Link href={`/stock/${post.prediction.pick}`} className="display-cond text-[24px] font-bold leading-none">{post.prediction.pick}</Link>
+            <span className="font-display italic text-muted">beats</span>
+            <Link href={`/stock/${post.prediction.versus}`} className="display-cond text-[24px] font-bold leading-none text-ink-soft">{post.prediction.versus}</Link>
+            <span className="text-[13px] text-muted">· {post.prediction.horizon}</span>
           </div>
           {!isMine && (
             <button

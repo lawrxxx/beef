@@ -15,14 +15,14 @@ export const STATUS_LABEL: Record<DuelStatus, string> = {
 };
 
 export const STATUS_STYLE: Record<DuelStatus, string> = {
-  pending: "bg-gold-soft text-gold",
-  accepted: "bg-gold-soft text-gold",
-  active: "bg-gain-soft text-gain",
-  awaiting_verification: "bg-gold-soft text-gold",
-  completed: "bg-black/[.05] text-ink-soft",
-  cancelled: "bg-black/[.05] text-muted",
-  declined: "bg-black/[.05] text-muted",
-  expired: "bg-black/[.05] text-muted",
+  pending: "text-gold",
+  accepted: "text-gold",
+  active: "text-gain",
+  awaiting_verification: "text-gold",
+  completed: "text-ink-soft",
+  cancelled: "text-muted",
+  declined: "text-muted",
+  expired: "text-muted",
 };
 
 export function trendingTickers(s: BeefState, limit = 8): { ticker: string; mentions: number }[] {

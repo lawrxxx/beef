@@ -126,7 +126,7 @@ function Inner({ d }: { d: Duel }) {
     <div className="card mt-4 p-4">
       <div className="flex items-center justify-between">
         <p className="flex items-center gap-2 font-semibold"><Lock size={16} /> stakes</p>
-        <span className="rounded-full bg-ink/[.05] px-2 py-0.5 text-[11px] font-semibold text-ink-soft">{NETWORK_NAME} · test usdc</span>
+        <span className="text-[11px] font-semibold uppercase tracking-[.08em] text-muted">{NETWORK_NAME} · test usdc</span>
       </div>
       {error ? <p className="mt-1 text-sm text-loss">{error}</p> : (
         <p className="mt-1 text-[13px] text-muted">
@@ -185,7 +185,7 @@ function Inner({ d }: { d: Duel }) {
         {short && <p className="mt-2 text-sm text-loss">not enough test usdc: you have {formatUsdc(balanceU!)} and need {formatUsdc(stakeU - balanceU!)} more.</p>}
         {unknownBalance && <p className="mt-2 text-sm text-muted">checking your balance on base sepolia…</p>}
         {mismatch && <p className="mt-2 text-sm text-loss">the escrow holds a different stake ({formatUsdc(state!.stake)}) than this duel shows. nothing will be sent.</p>}
-        {phase === "error" && msg && <p role="alert" className="mt-3 flex items-start gap-1.5 rounded-xl bg-loss/10 p-3 text-sm text-loss"><AlertTriangle size={15} className="mt-0.5 shrink-0" /><span className="break-words">{msg}</span></p>}
+        {phase === "error" && msg && <p role="alert" className="mt-3 flex items-start gap-1.5 rounded-md bg-loss/10 p-3 text-sm text-loss"><AlertTriangle size={15} className="mt-0.5 shrink-0" /><span className="break-words">{msg}</span></p>}
         <p className="mt-3 flex items-center gap-1.5 text-xs text-muted"><Sparkles size={12} className="text-gold" /> test usdc has no monetary value.</p>
         <button className="btn-primary mt-4 w-full" disabled={(moves && (!agree || short || unknownBalance)) || mismatch || phase === "sending"} onClick={go}>
           {phase === "sending" ? <><Loader2 size={16} className="animate-spin" /> sending…</> : "confirm"}

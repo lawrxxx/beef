@@ -23,15 +23,15 @@ export default function RulesPage() {
 
       <section className="card mt-5 p-5">
         <h2 className="text-lg font-bold">the formula</h2>
-        <p className="mt-2 rounded-xl bg-ink/[.04] p-3 font-mono text-sm">return = ((ending price − starting price) ÷ starting price) × 100</p>
+        <p className="mt-2 rounded-md bg-ink/[.04] p-3 font-mono text-sm">return = ((ending price − starting price) ÷ starting price) × 100</p>
         <p className="mt-3 text-[15px] text-ink-soft">beef always compares <b>percentage returns</b>, never share prices or dollar gains. a $180 stock and a $250 stock compete on equal terms.</p>
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
-          <div className="rounded-xl border p-3 text-sm">
+          <div className="rounded-md border p-3 text-sm">
             <p className="font-semibold">example: both rise</p>
             <p className="mt-1 text-ink-soft">nvda $180 → $189 = <b className="text-gain">+5.00%</b><br />aapl $250 → $257.50 = <b className="text-gain">+3.00%</b></p>
             <p className="mt-1 text-muted">nvda wins by 2.00 percentage points, even though aapl's share price is higher.</p>
           </div>
-          <div className="rounded-xl border p-3 text-sm">
+          <div className="rounded-md border p-3 text-sm">
             <p className="font-semibold">example: both fall</p>
             <p className="mt-1 text-ink-soft">nvda = <b className="text-loss">−5.00%</b><br />aapl = <b className="text-loss">−2.00%</b></p>
             <p className="mt-1 text-muted">aapl wins. it lost less.</p>

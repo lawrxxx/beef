@@ -60,7 +60,7 @@ function Inner({ stakeUnits, onStatus }: { stakeUnits: bigint | null; onStatus: 
   const copy = async () => { await navigator.clipboard.writeText(w.smartAccount!).catch(() => {}); toast("success", "wallet address copied"); };
 
   return (
-    <div className={`mt-2.5 rounded-2xl border px-3 py-2 ${need != null ? "border-gold/40 bg-gold-soft/50" : "bg-surface"}`} aria-live="polite">
+    <div className={`mt-2.5 rounded-lg border px-3 py-2 ${need != null ? "border-gold/40 bg-gold-soft/50" : "bg-surface"}`} aria-live="polite">
       <div className="flex items-center justify-between gap-2">
         <p className="min-w-0 text-sm">
           <span className="text-muted">available balance: </span>
@@ -97,7 +97,7 @@ export function StakeBalance(props: { stakeUnits: bigint | null; onStatus: (s: S
   const ready = useCdpReady();
   const enabled = cdpEnabled();
   useEffect(() => { if (!enabled) props.onStatus({ ready: false, reason: "wallets aren't switched on for this deployment" }); }, [enabled]); // eslint-disable-line react-hooks/exhaustive-deps
-  if (!enabled) return <p className="mt-2.5 rounded-2xl border px-3 py-2 text-[13px] text-muted">wallets aren't switched on for this deployment, so stakes can't be locked.</p>;
-  if (!ready) return <div className="mt-3 rounded-2xl border px-3 py-2.5"><div className="skeleton h-5 w-48" /></div>;
+  if (!enabled) return <p className="mt-2.5 rounded-lg border px-3 py-2 text-[13px] text-muted">wallets aren't switched on for this deployment, so stakes can't be locked.</p>;
+  if (!ready) return <div className="mt-3 rounded-lg border px-3 py-2.5"><div className="skeleton h-5 w-48" /></div>;
   return <Inner {...props} />;
 }

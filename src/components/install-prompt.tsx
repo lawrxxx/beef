@@ -88,8 +88,8 @@ export function InstallPrompt() {
     <>
       {show && (
         <div className="fixed inset-x-3 bottom-[calc(76px+env(safe-area-inset-bottom))] z-40 mx-auto max-w-md animate-fade-up lg:bottom-6 lg:left-auto lg:right-6">
-          <div className="card flex items-center gap-3 p-3 shadow-pop">
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand text-white"><Download size={20} /></span>
+          <div className="flex items-center gap-3 rounded-lg border-2 border-ink bg-surface p-3">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-brand text-white"><Download size={20} /></span>
             <div className="min-w-0 flex-1">
               <p className="text-sm font-semibold">put beef on your home screen</p>
               <p className="text-xs text-muted">opens full screen, like an app</p>

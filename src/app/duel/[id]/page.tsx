@@ -19,7 +19,7 @@ import { resolveEndSession, sessionCloseUtc, sessionDateOf } from "@/lib/market/
 import { txUrl } from "@/lib/chain/config";
 import { deadlineLine, deadlineText, etLabel, localLabel } from "@/lib/expiration";
 import { Avatar, CardSkeleton, EmptyState, Pct, QuoteLine, SourceBadge, UserLink, useAction } from "@/components/ui";
-import { StatusPill, VersusBar } from "@/components/duel-card";
+import { ResultStamp, StatusPill, VersusBar } from "@/components/duel-card";
 import { Comments, ReactionBar } from "@/components/social";
 import { drawTrophyCard, shareCanvas, shareLink } from "@/components/share";
 import dynamic from "next/dynamic";
@@ -72,65 +72,78 @@ function DuelView({ d }: { d: Duel }) {
         <div className="flex items-center gap-2"><SourceBadge /><StatusPill d={d} /></div>
       </div>
 
-      {d.title && <h1 className="mb-1 font-display text-2xl font-bold tracking-tight">{d.title}</h1>}
-      <p className="mb-4 text-[15px] text-muted">
-        {fmtStake(d.stake)} test usdc each · <b className="text-ink">{pot} test usdc pot</b> · ends {deadlineLine(d, new Date(now || Date.now()))}
+      {/* masthead: the matchup in big condensed type */}
+      <h1 className="display-cond text-[46px] font-bold uppercase leading-[.92] tracking-[-0.01em]">
+        {d.participants.map((p, i) => <span key={p.ticker}>{i > 0 && <span className="mx-1.5 font-normal text-brand">/</span>}{p.ticker}</span>)}
+      </h1>
+      {d.title && d.title !== d.participants.map((p) => p.ticker).join(" vs ") && <p className="mt-1 font-display text-lg font-semibold tracking-tight">{d.title}</p>}
+      <p className="mb-5 mt-2 text-[14px] text-muted">
+        {fmtStake(d.stake)} test usdc each · <b className="text-ink">{pot} pot</b> · ends {deadlineLine(d, new Date(now || Date.now()))}
         {d.communityId && <> · <Link className="underline" href={`/communities/${s.communities.find((c) => c.id === d.communityId)?.slug}`}>{s.communities.find((c) => c.id === d.communityId)?.name}</Link></>}
       </p>
 
-      {/* hero */}
-      <div className="card overflow-hidden">
+      {/* hero: a scoreboard, not a dashboard card */}
+      <div className="border-y-2 border-ink">
         {done && (
-          <div className={cx("px-4 py-3 text-center text-sm font-semibold", st.status === "draw" ? "bg-ink/[.04]" : "bg-gold-soft text-gold")}>
-            {st.status === "draw" ? "🤝 a dead heat. stakes returned." : `🏆 ${st.winners.map((w) => usersMap[w]?.displayName ?? "?").join(" & ")} ${st.winners.length > 1 ? "win" : "wins"} ${formatUsdc(potUnits / BigInt(Math.max(1, st.winners.length)))} test usdc`}
+          <div className="border-b border-line py-4 text-center">
+            {st.status === "draw" ? (
+              <p className="font-display text-[26px] font-bold tracking-[-0.03em]">dead heat. stakes returned.</p>
+            ) : (
+              <>
+                <p className="font-display text-[26px] font-bold leading-tight tracking-[-0.03em]">{st.winners.map((w) => usersMap[w]?.displayName ?? "?").join(" & ")} {st.winners.length > 1 ? "win" : "wins"}.</p>
+                <p className="num mt-1 text-[14px] text-muted">takes <b className="text-ink">{formatUsdc(potUnits / BigInt(Math.max(1, st.winners.length)))} test usdc</b> · by {st.marginPct.toFixed(4)} pts</p>
+              </>
+            )}
           </div>
         )}
         {live && leader && (
-          <div className="bg-gain-soft px-4 py-2.5 text-center text-sm font-semibold text-gain">
-            {usersMap[leader.userId]?.displayName ?? "?"} is leading with {leader.ticker} <span className="font-normal text-gain/80">· not final until the deadline</span>
-          </div>
+          <p className="flex items-center justify-center gap-2 border-b border-line py-2.5 text-[13px]">
+            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-gain" />
+            <span><b>{usersMap[leader.userId]?.displayName ?? "?"}</b> leads with {leader.ticker}</span>
+            <span className="text-muted">· not final until the deadline</span>
+          </p>
         )}
-        <div className={cx("grid gap-3 p-5", group ? "grid-cols-2" : "grid-cols-[1fr_auto_1fr] items-start")}>
+        <div className={cx("grid gap-x-3 gap-y-5 py-5", group ? "grid-cols-2" : "grid-cols-[1fr_auto_1fr] items-start")}>
           {perf.map((p, i) => {
             const u = usersMap[p.userId];
             const isWinner = done ? st.winners.includes(p.userId) : leader?.userId === p.userId;
             const right = !group && i === 1;
             const node = (
-              <div key={p.ticker} className={cx("flex flex-col", right ? "items-end text-right" : "items-start", group && "card p-3")}>
-                <div className="relative">
-                  <Avatar user={u} size={group ? 44 : 56} />
-                  {isWinner && <Crown size={20} className="absolute -right-1 -top-2 rotate-12 fill-gold-soft text-gold" />}
+              <div key={p.ticker} className={cx("relative flex min-w-0 flex-col", right ? "items-end text-right" : "items-start")}>
+                <div className={cx("flex items-center gap-2", right && "flex-row-reverse")}>
+                  <Avatar user={u} size={group ? 34 : 40} />
+                  <p className="min-w-0 truncate text-[13px] font-semibold leading-tight">{u ? <UserLink user={u} /> : "open spot"}{u?.id === me?.id && <span className="font-normal text-muted"> (you)</span>}</p>
                 </div>
-                <p className="mt-2 max-w-full truncate text-sm font-semibold">{u ? <UserLink user={u} /> : "open spot"}{u?.id === me?.id && <span className="text-muted"> (you)</span>}</p>
-                <p className="font-display text-[28px] font-extrabold leading-none tracking-tight">{p.ticker}</p>
-                <div className="mt-2 text-[22px]">{live || done ? <Pct v={p.ret} /> : <span className="text-base text-faint">not started</span>}</div>
+                <p className={cx("display-cond mt-3 text-[34px] font-bold uppercase leading-none", isWinner && !done && "text-ink", !isWinner && done && "text-muted")}>
+                  {p.ticker}{isWinner && !done && <Crown size={16} className="ml-1 inline -translate-y-3 text-gold" />}
+                </p>
+                <div className="mt-1.5 leading-none">{live || done ? <Pct v={p.ret} className="display-cond text-[52px] font-bold tracking-[-0.02em]" digits={2} /> : <span className="text-base text-faint">not started</span>}</div>
+                {done && st.status !== "draw" && <ResultStamp kind={isWinner ? "won" : "lost"} className={cx("mt-3", right && "rotate-[4deg]")} />}
                 {p.accepted ? null : <span className="mt-1 text-xs text-gold">hasn't accepted</span>}
               </div>
             );
-            if (right) return [<div key="vs" className="pt-5 font-display text-sm font-extrabold text-faint">vs</div>, node];
+            if (right) return [<div key="vs" className="self-center font-display text-[15px] italic text-faint">vs</div>, node];
             return node;
           })}
         </div>
-        {!group && (live || done) && <div className="px-5 pb-4"><VersusBar a={perf[0]?.ret ?? null} b={perf[1]?.ret ?? null} /></div>}
+        {!group && (live || done) && <div className="pb-5"><VersusBar a={perf[0]?.ret ?? null} b={perf[1]?.ret ?? null} /></div>}
 
-        <div className="grid grid-cols-3 border-t text-center">
-          <div className="border-r p-3">
-            <p className="text-xs text-muted">{done ? "ended" : live ? "time left" : d.status === "accepted" ? "prices lock in" : d.status === "awaiting_verification" ? "status" : "length"}</p>
-            <p className="num mt-0.5 font-semibold">
-              {done ? sessionLabel(st.endSession) : live ? countdown(d.deadline, now) : d.status === "accepted" && d.startAt ? countdown(d.startAt, now) : d.status === "awaiting_verification" ? "paused" : (dl.rule ?? dl.et)}
-            </p>
-          </div>
-          <div className="border-r p-3">
-            <p className="text-xs text-muted">stake</p>
-            <p className="num mt-0.5 font-semibold">{fmtStake(d.stake)} each</p><p className="text-[10px] text-muted">test usdc</p>
-          </div>
-          <div className="p-3">
-            <p className="text-xs text-muted">prize pool</p>
-            <p className="num mt-0.5 font-semibold">{pot}</p><p className="text-[10px] text-muted">test usdc</p>
-          </div>
+        <div className="grid grid-cols-3 border-t border-line">
+          {[
+            [done ? "ended" : live ? "time left" : d.status === "accepted" ? "prices lock in" : d.status === "awaiting_verification" ? "status" : "length",
+              done ? sessionLabel(st.endSession) : live ? countdown(d.deadline, now) : d.status === "accepted" && d.startAt ? countdown(d.startAt, now) : d.status === "awaiting_verification" ? "paused" : (dl.rule ?? dl.et), ""],
+            ["stake", `${fmtStake(d.stake)}`, "test usdc each"],
+            ["prize pool", pot, "test usdc"],
+          ].map(([k, v, sub], i) => (
+            <div key={k} className={cx("py-3", i > 0 && "border-l border-line pl-3")}>
+              <p className="text-[10.5px] font-semibold uppercase tracking-[.12em] text-muted">{k}</p>
+              <p className="num display-cond mt-1 text-[22px] font-bold leading-none">{v}</p>
+              {sub && <p className="mt-0.5 text-[11px] text-muted">{sub}</p>}
+            </div>
+          ))}
         </div>
-        <div className="flex items-center justify-between border-t px-4 py-2.5 text-[13px]">
-          <span className="text-muted">settlement</span>
+        <div className="flex items-center justify-between border-t border-line py-2.5 text-[13px]">
+          <span className="text-[10.5px] font-semibold uppercase tracking-[.12em] text-muted">settlement</span>
           <span className="font-medium">{SETTLEMENT_LABEL(d)}</span>
         </div>
       </div>
@@ -175,9 +188,9 @@ function DuelView({ d }: { d: Duel }) {
           </div>
         )}
         {done && (
-          <div className="card p-4">
-            <p className="flex items-center gap-2 font-semibold"><CheckCircle2 size={17} className="text-gain" /> how the winner was decided</p>
-            <p className="mt-1.5 text-[15px] leading-relaxed text-ink-soft">{st.explanation}</p>
+          <div className="pb-2">
+            <p className="section-title rule-title">how the winner was decided</p>
+            <p className="mt-2.5 text-[16px] leading-relaxed text-ink">{st.explanation}</p>
             <div className="mt-3 grid grid-cols-2 gap-2">
               <button className="btn-dark btn-sm" onClick={() => shareCanvas(drawTrophyCard(d, usersMap), `beef-${d.id}.png`, st.explanation, `/duel/${d.id}`)}><ImageIcon size={15} /> share trophy card</button>
               {mine && opponent ? (

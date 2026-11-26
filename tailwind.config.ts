@@ -8,6 +8,7 @@ export default {
       // every colour is a css variable (src/app/globals.css), so light and dark share one set of classes
       colors: {
         bg: "rgb(var(--bg) / <alpha-value>)",
+        sunken: "rgb(var(--sunken) / <alpha-value>)",
         surface: "rgb(var(--surface) / <alpha-value>)",
         ink: { DEFAULT: "rgb(var(--ink) / <alpha-value>)", soft: "rgb(var(--ink-soft) / <alpha-value>)" },
         /** text on ink-coloured surfaces (white in light mode, charcoal in dark) */
@@ -22,10 +23,13 @@ export default {
         chainlink: "rgb(var(--chainlink) / <alpha-value>)",
       },
       fontFamily: {
-        sans: ["ui-sans-serif", "-apple-system", "BlinkMacSystemFont", "\"SF Pro Text\"", "Inter", "\"Segoe UI\"", "Roboto", "sans-serif"],
-        display: ["ui-rounded", "\"SF Pro Rounded\"", "-apple-system", "BlinkMacSystemFont", "Inter", "sans-serif"],
+        // instrument sans for reading, bricolage grotesque for display (self-hosted, src/app/fonts)
+        sans: ["var(--font-body)", "ui-sans-serif", "system-ui", "-apple-system", "\"Segoe UI\"", "Roboto", "sans-serif"],
+        display: ["var(--font-display)", "ui-sans-serif", "system-ui", "sans-serif"],
+        mono: ["var(--font-mono)", "ui-monospace", "SFMono-Regular", "Menlo", "monospace"],
       },
-      borderRadius: { xl: "14px", "2xl": "20px", "3xl": "28px" },
+      // print-like corners: nothing pillowy
+      borderRadius: { lg: "8px", xl: "10px", "2xl": "12px", "3xl": "16px" },
       boxShadow: {
         card: "var(--shadow-card)",
         pop: "var(--shadow-pop)",
