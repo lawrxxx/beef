@@ -5,7 +5,7 @@ export type ResolvedTheme = "light" | "dark";
 
 export const THEME_KEY = "beef:theme";
 /** browser chrome / status bar colours: the --bg of each theme */
-export const THEME_COLORS: Record<ResolvedTheme, string> = { light: "#F2EDE3", dark: "#14120F" };
+export const THEME_COLORS: Record<ResolvedTheme, string> = { light: "#ECE6D9", dark: "#0E0D0C" };
 
 
 /** runs in <head> before anything renders. keep it small and dependency-free. */

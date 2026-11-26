@@ -32,7 +32,7 @@ export async function shareLink(path: string, text: string, title = "beef") {
 // ---------- image cards ----------
 
 const W = 1080, H = 1350;
-const C = { bg: "#F2EDE3", ink: "#1C1915", muted: "#70685C", brand: "#CD421C", brandText: "#AC3414", gain: "#2E6E4C", loss: "#8A3448", line: "#DCD3C4", gold: "#866019" };
+const C = { bg: "#ECE6D9", ink: "#121110", muted: "#6A645B", brand: "#EB4024", brandText: "#B5230E", gain: "#1A6B40", loss: "#8B2E44", line: "#CFC6B4", gold: "#866019", slabText: "#EFE9DC", slabMuted: "#8F887D" };
 
 function rr(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
   ctx.beginPath();
@@ -45,45 +45,51 @@ function rr(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: n
 }
 
 /** the app's own self-hosted faces (next/font exposes their family names as css variables) */
-function family(v: "--font-display" | "--font-body") {
+function family(v: "--font-display" | "--font-mono" | "--font-serif") {
   const f = typeof document !== "undefined" ? getComputedStyle(document.documentElement).getPropertyValue(v).trim() : "";
   return `${f ? f + ", " : ""}system-ui, sans-serif`;
 }
-function font(weight: number, size: number, kind: "display" | "body" | "cond" = "display") {
-  const stretch = kind === "cond" ? "condensed " : "";
-  return `${stretch}${weight} ${size}px ${family(kind === "body" ? "--font-body" : "--font-display")}`;
+function font(weight: number, size: number, kind: "display" | "body" | "cond" | "mono" | "serif" = "display") {
+  if (kind === "mono") return `${weight} ${size}px ${family("--font-mono")}`;
+  if (kind === "serif") return `italic ${weight} ${size}px ${family("--font-serif")}`;
+  return `${weight} ${size}px ${family("--font-display")}`;
 }
-function rule(ctx: CanvasRenderingContext2D, y: number, w = 3, color = C.ink) { ctx.fillStyle = color; ctx.fillRect(80, y, W - 160, w); }
+/** sets the font; condensed comes from fontStretch (the canvas font string can't carry it everywhere) */
+function setF(ctx: CanvasRenderingContext2D, weight: number, size: number, kind: "display" | "body" | "cond" | "mono" | "serif" = "display") {
+  ctx.font = font(weight, size, kind);
+  (ctx as CanvasRenderingContext2D & { fontStretch?: string }).fontStretch = kind === "cond" ? "extra-condensed" : "normal";
+}
+function rule(ctx: CanvasRenderingContext2D, y: number, w = 4, color = C.ink) { ctx.fillStyle = color; ctx.fillRect(0, y, W, w); }
 
 function brandHeader(ctx: CanvasRenderingContext2D) {
   ctx.fillStyle = C.bg; ctx.fillRect(0, 0, W, H);
-  ctx.fillStyle = C.brand; rr(ctx, 80, 80, 84, 84, 18); ctx.fill();
-  ctx.fillStyle = "#FAF7F1"; rr(ctx, 96, 98, 40, 30, 8); ctx.fill();
-  ctx.fillStyle = C.ink; rr(ctx, 116, 118, 34, 26, 7); ctx.fill();
-  ctx.fillStyle = C.ink; ctx.font = font(800, 60); ctx.textBaseline = "middle";
-  ctx.fillText("beef", 184, 122);
-  ctx.fillStyle = C.muted; ctx.font = font(500, 26, "body"); ctx.textAlign = "right";
-  ctx.fillText("put your money where your mouth is.", W - 80, 124);
+  ctx.fillStyle = C.brand; ctx.fillRect(64, 64, 72, 72);
+  ctx.fillStyle = "#F6F2E9"; rr(ctx, 77, 80, 34, 26, 6); ctx.fill();
+  ctx.fillStyle = C.ink; rr(ctx, 95, 98, 30, 22, 6); ctx.fill();
+  ctx.fillStyle = C.ink; setF(ctx, 900, 76, "cond"); ctx.textBaseline = "middle";
+  ctx.fillText("BEEF", 152, 104);
+  ctx.fillStyle = C.muted; setF(ctx, 500, 22, "mono"); ctx.textAlign = "right";
+  ctx.fillText("PUT YOUR MONEY WHERE YOUR MOUTH IS", W - 64, 104);
   ctx.textAlign = "left";
-  rule(ctx, 204);
+  rule(ctx, 186, 6);
 }
 
 function footer(ctx: CanvasRenderingContext2D, date: string) {
-  rule(ctx, H - 170, 2);
-  ctx.textBaseline = "alphabetic";
-  ctx.fillStyle = C.muted; ctx.font = font(500, 26, "body");
-  ctx.fillText(date, 80, H - 112);
+  ctx.fillStyle = C.ink; ctx.fillRect(0, H - 112, W, 112);
+  ctx.textBaseline = "middle";
+  ctx.fillStyle = C.slabText; setF(ctx, 700, 24, "mono");
+  ctx.fillText(date.toUpperCase(), 64, H - 70);
   ctx.textAlign = "right";
-  ctx.fillText(typeof window !== "undefined" ? window.location.host : "beef", W - 80, H - 112);
+  ctx.fillText((typeof window !== "undefined" ? window.location.host : "beef").toUpperCase(), W - 64, H - 70);
   ctx.textAlign = "left";
-  ctx.fillStyle = C.gold; ctx.font = font(600, 22, "body");
-  ctx.fillText("prices: chainlink data feeds · test usdc, no real money", 80, H - 72);
+  ctx.fillStyle = C.slabMuted; setF(ctx, 500, 18, "mono");
+  ctx.fillText("PRICES: CHAINLINK DATA FEEDS · TEST USDC, NO REAL MONEY", 64, H - 36);
 }
 
 function stamp(ctx: CanvasRenderingContext2D, text: string, cx: number, cy: number, color: string) {
-  ctx.save(); ctx.translate(cx, cy); ctx.rotate(-0.07);
-  ctx.font = font(800, 64, "cond"); const w = ctx.measureText(text).width + 56;
-  ctx.strokeStyle = color; ctx.lineWidth = 7; rr(ctx, -w / 2, -48, w, 96, 8); ctx.stroke();
+  ctx.save(); ctx.translate(cx, cy); ctx.rotate(-0.09);
+  setF(ctx, 900, 72, "cond"); const w = ctx.measureText(text).width + 52;
+  ctx.strokeStyle = color; ctx.lineWidth = 8; ctx.strokeRect(-w / 2, -50, w, 100);
   ctx.fillStyle = color; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(text, 0, 4);
   ctx.restore(); ctx.textAlign = "left";
 }
@@ -96,46 +102,36 @@ export function drawTrophyCard(d: Duel, users: Record<string, User | undefined>)
   const st = d.settlement!;
   const draw = st.status === "draw";
   const winners = st.winners.map((w) => users[w]);
-  const entries = [...st.entries].sort((a, b) => b.returnPct - a.returnPct);
+  const entries = [...st.entries].sort((a, b) => b.returnPct - a.returnPct).slice(0, 4);
 
-  // headline
+  // headline, written from the result
   ctx.textBaseline = "alphabetic";
-  ctx.fillStyle = C.brandText; ctx.font = font(700, 26, "cond");
-  ctx.fillText(draw ? "DEAD HEAT" : "RESULT", 80, 290);
-  ctx.fillStyle = C.ink; ctx.font = font(800, draw ? 104 : 96);
-  ctx.fillText(draw ? "dead heat." : `@${winners[0]?.username ?? "winner"}`, 80, 400);
-  if (!draw) ctx.fillText(st.winners.length > 1 ? "win." : "wins.", 80, 500);
-  stamp(ctx, draw ? "DRAW" : "WON", W - 210, draw ? 360 : 440, draw ? C.ink : C.brand);
-  ctx.fillStyle = C.muted; ctx.font = font(500, 32, "body");
-  const others = entries.filter((e) => !st.winners.includes(e.userId)).map((e) => `@${users[e.userId]?.username}`);
-  ctx.fillText(draw ? "identical returns, every stake returned" : `beat ${others.slice(0, 2).join(", ")}${others.length > 2 ? " +" + (others.length - 2) : ""}`, 80, draw ? 470 : 565);
+  ctx.fillStyle = C.ink; setF(ctx, 900, 118, "cond");
+  ctx.fillText(draw ? "DEAD HEAT." : `${(winners[0]?.displayName.split(" ")[0] ?? "winner").toUpperCase()} ${st.winners.length > 1 ? "WIN" : "WINS"}.`, 64, 318);
+  ctx.fillStyle = C.muted; setF(ctx, 500, 26, "mono");
+  ctx.fillText(draw ? "IDENTICAL RETURNS · EVERY STAKE RETURNED" : `BY ${st.marginPct.toFixed(4)} PTS`, 64, 368);
 
-  // scoreboard rows
-  const top = 640, rowH = entries.length > 2 ? 118 : 150;
-  rule(ctx, top - 20, 3);
-  entries.slice(0, 4).forEach((e, i) => {
-    const y = top + i * rowH;
-    const won = st.winners.includes(e.userId);
-    if (won && !draw) { ctx.fillStyle = C.brand; ctx.fillRect(80, y + 14, 8, rowH - 28); }
-    ctx.textBaseline = "middle";
-    ctx.fillStyle = won ? C.ink : C.muted; ctx.font = font(800, 76, "cond");
-    ctx.fillText(e.ticker, 112, y + rowH / 2 - 14);
-    ctx.fillStyle = C.muted; ctx.font = font(500, 26, "body");
-    ctx.fillText(`@${users[e.userId]?.username ?? "?"} · $${e.startPrice.toFixed(2)} → $${e.endPrice.toFixed(2)}`, 114, y + rowH / 2 + 36);
-    ctx.textAlign = "right";
-    ctx.fillStyle = e.returnPct > 0 ? C.gain : e.returnPct < 0 ? C.loss : C.muted; ctx.font = font(800, 84, "cond");
-    ctx.fillText(pct(e.returnPct), W - 80, y + rowH / 2);
+  // the slab: one band per side, the winner's band in beef red
+  const top = 410, bandH = Math.min(330, Math.floor((H - 112 - 40 - top) / entries.length));
+  entries.forEach((e, i) => {
+    const y = top + i * bandH;
+    const won = !draw && st.winners.includes(e.userId);
+    ctx.fillStyle = won ? C.brand : C.ink; ctx.fillRect(0, y, W, bandH);
+    if (i > 0) { ctx.fillStyle = C.bg; ctx.fillRect(0, y, W, 6); }
+    // ticker as image, bleeding off the edge
+    ctx.save(); ctx.globalAlpha = 0.13; ctx.fillStyle = won ? C.ink : C.slabText; setF(ctx, 900, bandH * 1.15, "cond"); ctx.textBaseline = "alphabetic"; ctx.textAlign = "right";
+    ctx.beginPath(); ctx.rect(0, y, W, bandH); ctx.clip(); ctx.fillText(e.ticker, W + 30, y + bandH * 1.02); ctx.restore();
+    const fg = won ? C.ink : draw ? C.slabText : C.slabMuted;
+    ctx.fillStyle = fg; ctx.textBaseline = "alphabetic";
+    setF(ctx, 700, 22, "mono"); ctx.fillText(`@${users[e.userId]?.username ?? "?"}`.toUpperCase() + (won ? " · WINNER" : ""), 64, y + 50);
+    setF(ctx, 900, 72, "cond"); ctx.fillText(e.ticker, 64, y + 122);
+    if (!won && !draw) { const tw = ctx.measureText(e.ticker).width; ctx.fillRect(60, y + 96, tw + 8, 7); }
+    setF(ctx, 900, bandH > 280 ? 178 : bandH > 200 ? 132 : 96, "cond"); ctx.textAlign = "right";
+    ctx.fillText(pct(e.returnPct).replace("-", "−"), W - 64, y + bandH - 34);
     ctx.textAlign = "left";
-    rule(ctx, y + rowH - 1, 2, C.line);
+    setF(ctx, 500, 20, "mono"); ctx.fillText(`$${e.startPrice.toFixed(2)} → $${e.endPrice.toFixed(2)}`, 64, y + bandH - 34);
   });
-
-  const shown = Math.min(entries.length, 4);
-  const by = top + shown * rowH + 70;
-  ctx.textBaseline = "alphabetic";
-  ctx.fillStyle = C.ink; ctx.font = font(700, 36);
-  ctx.fillText(draw ? "identical percentage returns" : `won by ${st.marginPct.toFixed(2)} percentage points`, 80, by);
-  ctx.fillStyle = C.muted; ctx.font = font(500, 24, "body");
-  ctx.fillText("return = (end − start) ÷ start. share price doesn't matter.", 80, by + 44);
+  stamp(ctx, draw ? "DRAW" : "FINAL", W - 190, 286, draw ? C.ink : C.brand);
   footer(ctx, `${sessionLabel(st.startSession)} → ${sessionLabel(st.endSession)}`);
   return canvas;
 }
@@ -145,16 +141,16 @@ export function drawPredictionCard(author: User | undefined, pick: string, versu
   canvas.width = W; canvas.height = H;
   const ctx = canvas.getContext("2d")!;
   brandHeader(ctx);
-  ctx.textAlign = "center"; ctx.fillStyle = C.muted; ctx.font = font(600, 36);
-  ctx.fillText(`@${author?.username ?? "someone"} predicts`, W / 2, 340);
-  ctx.fillStyle = C.ink; ctx.font = font(800, 210, "cond");
+  ctx.textAlign = "center"; ctx.fillStyle = C.muted; setF(ctx, 600, 28, "mono");
+  ctx.fillText(`@${author?.username ?? "someone"} calls it`.toUpperCase(), W / 2, 340);
+  ctx.fillStyle = C.ink; setF(ctx, 900, 230, "cond");
   ctx.fillText(pick, W / 2, 530);
-  ctx.fillStyle = C.brandText; ctx.font = font(700, 52);
-  ctx.fillText(`beats ${versus}`, W / 2, 630);
-  ctx.fillStyle = C.muted; ctx.font = font(500, 36);
+  ctx.fillStyle = C.brandText; setF(ctx, 900, 72, "cond");
+  ctx.fillText(`> ${versus}`, W / 2, 630);
+  ctx.fillStyle = C.muted; setF(ctx, 500, 36);
   ctx.fillText(horizon, W / 2, 700);
   // quote
-  ctx.fillStyle = C.ink; ctx.font = font(500, 36);
+  ctx.fillStyle = C.ink; setF(ctx, 400, 40, "serif");
   const words = `“${body}”`.split(" ");
   let line = "", y = 820;
   for (const w of words) {
@@ -162,7 +158,7 @@ export function drawPredictionCard(author: User | undefined, pick: string, versu
     line += w + " ";
   }
   if (y <= 1060) ctx.fillText(line.trim(), W / 2, y);
-  ctx.fillStyle = C.ink; ctx.font = font(700, 34);
+  ctx.fillStyle = C.ink; setF(ctx, 700, 34);
   ctx.fillText("think they're wrong? challenge them on beef.", W / 2, H - 220);
   ctx.textAlign = "left";
   footer(ctx, new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }).toLowerCase());

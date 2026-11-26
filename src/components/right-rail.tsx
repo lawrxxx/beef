@@ -77,3 +77,50 @@ export function TrendingStrip() {
     </div>
   );
 }
+
+/** the red ticker tape: real chainlink feed prices for the most talked-about stocks */
+export function TickerTape({ className }: { className?: string }) {
+  const s = useBeef();
+  const tickers = useMemo(() => {
+    const t = trendingTickers(s, 7).map((x) => x.ticker);
+    for (const x of ["NVDA", "AAPL", "MSFT", "TSLA", "AMZN", "GOOGL", "META"]) if (!t.includes(x)) t.push(x);
+    return t.slice(0, 7);
+  }, [s]);
+  const { quotes } = useQuotes(tickers);
+  const items = tickers.map((t) => ({ t, p: quotes[t]?.price != null ? Number(quotes[t]!.price) : null }));
+  if (!items.some((i) => i.p != null)) return null;
+  const run = (k: string) => (
+    <span className="flex shrink-0" key={k}>
+      {items.map(({ t, p }) => (
+        <Link key={t} href={`/stock/${t}`} className="num mr-6 text-[11.5px] font-bold">{t} {p != null ? p.toFixed(2) : "—"}</Link>
+      ))}
+      <span className="meta mr-6 text-[10px] font-bold opacity-70">chainlink feeds</span>
+    </span>
+  );
+  return (
+    <div className={cx("overflow-hidden whitespace-nowrap bg-brand py-1.5 text-[rgb(18_17_16)]", className)} aria-label="stock prices">
+      <div className="tape-run">{run("a")}{run("b")}</div>
+    </div>
+  );
+}
+
+/** stocks as type: a grid of big tickers with mono prices */
+export function StockGrid({ limit = 6 }: { limit?: number }) {
+  const s = useBeef();
+  const list = useMemo(() => {
+    const t = trendingTickers(s, limit).map((x) => x.ticker);
+    for (const x of ["NVDA", "AAPL", "MSFT", "TSLA", "AMZN", "GOOGL", "META"]) if (t.length < limit && !t.includes(x)) t.push(x);
+    return t;
+  }, [s, limit]);
+  const { quotes } = useQuotes(list);
+  return (
+    <div className="grid grid-cols-2 gap-x-4 gap-y-4 sm:grid-cols-3">
+      {list.map((t) => (
+        <Link key={t} href={`/stock/${t}`} className="group border-t-[3px] border-ink pt-1.5">
+          <p className="cond text-[44px] leading-[.85] group-hover:text-brand-dark">{t}</p>
+          <QuoteLine q={quotes[t]} className="mt-1" />
+        </Link>
+      ))}
+    </div>
+  );
+}

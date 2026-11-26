@@ -8,6 +8,7 @@ export default {
       // every colour is a css variable (src/app/globals.css), so light and dark share one set of classes
       colors: {
         bg: "rgb(var(--bg) / <alpha-value>)",
+        slab: { DEFAULT: "rgb(var(--slab) / <alpha-value>)", 2: "rgb(var(--slab-2) / <alpha-value>)", text: "rgb(var(--slab-text) / <alpha-value>)", muted: "rgb(var(--slab-muted) / <alpha-value>)" },
         sunken: "rgb(var(--sunken) / <alpha-value>)",
         surface: "rgb(var(--surface) / <alpha-value>)",
         ink: { DEFAULT: "rgb(var(--ink) / <alpha-value>)", soft: "rgb(var(--ink-soft) / <alpha-value>)" },
@@ -23,13 +24,15 @@ export default {
         chainlink: "rgb(var(--chainlink) / <alpha-value>)",
       },
       fontFamily: {
-        // instrument sans for reading, bricolage grotesque for display (self-hosted, src/app/fonts)
+        // archivo (one family, two widths) for display and interface, jetbrains mono for every number,
+        // newsreader italic only where a person speaks. all self-hosted in src/app/fonts.
         sans: ["var(--font-body)", "ui-sans-serif", "system-ui", "-apple-system", "\"Segoe UI\"", "Roboto", "sans-serif"],
         display: ["var(--font-display)", "ui-sans-serif", "system-ui", "sans-serif"],
         mono: ["var(--font-mono)", "ui-monospace", "SFMono-Regular", "Menlo", "monospace"],
+        serif: ["var(--font-serif)", "Georgia", "serif"],
       },
       // print-like corners: nothing pillowy
-      borderRadius: { lg: "8px", xl: "10px", "2xl": "12px", "3xl": "16px" },
+      borderRadius: { none: "0px", sm: "0px", DEFAULT: "0px", md: "0px", lg: "0px", xl: "0px", "2xl": "0px", "3xl": "0px", full: "0px" },
       boxShadow: {
         card: "var(--shadow-card)",
         pop: "var(--shadow-pop)",

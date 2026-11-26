@@ -4,73 +4,82 @@
 
 @layer base {
   /*
-   * beef identity: paper, ink and a vermilion stamp.
-   * light is warm newsprint; dark is deep ink with paper-coloured type (not an inversion).
-   * roles: bg (page) · surface (raised paper, used sparingly) · sunken (wells, tracks) · ink (type, primary actions)
-   * line (hairlines) · brand (vermilion: one action per screen, wins, the stamp) · gain/loss (muted moss / plum)
-   * gold (ochre: crowns, streaks, warnings) · slate (chainlink, info).
+   * beef · matchday. a back-page sports paper printed by a streetwear label.
+   * bone and ink everywhere; beef red only as whole fields (the leader's half, #1, the pot,
+   * the tape, the one action). numbers are always mono. corners are square.
+   * roles: bg (page) · surface (paper, used rarely) · sunken (wells) · ink (type, frames)
+   * slab (the dark contest surface, in both themes) · brand (beef red) · gain/loss (small, on numbers only)
    */
   :root {
     color-scheme: light;
     -webkit-tap-highlight-color: transparent;
-    --bg: 242 237 227;        /* #F2EDE3 newsprint */
-    --surface: 250 247 241;   /* #FAF7F1 fresh paper */
-    --sunken: 232 225 212;    /* #E8E1D4 */
-    --ink: 28 25 21;          /* #1C1915 warm ink */
-    --ink-soft: 61 55 47;
-    --inverse: 248 244 236;
-    --muted: 112 104 92;      /* #70685C */
-    --faint: 133 124 109;  /* #857C6D: decorative + large text only */
-    --line: 220 211 196;      /* #DCD3C4 */
-    --brand: 205 66 28;       /* #CD421C vermilion */
-    --brand-dark: 172 52 20;  /* vermilion text on paper (aa) */
-    --brand-soft: 243 221 208;
-    --brand-ink: 122 36 12;
-    --gain: 46 110 76;        /* #2E6E4C moss */
-    --gain-soft: 221 233 220;
-    --loss: 138 52 72;        /* #8A3448 plum */
-    --loss-soft: 239 221 224;
-    --gold: 134 96 25;        /* #866019 ochre */
-    --gold-soft: 240 228 198;
-    --chainlink: 72 86 104;   /* slate */
+    --bg: 236 230 217;         /* #ECE6D9 bone */
+    --surface: 246 242 233;    /* #F6F2E9 paper */
+    --sunken: 224 216 199;     /* #E0D8C7 newsprint */
+    --ink: 18 17 16;           /* #121110 */
+    --ink-soft: 43 40 37;      /* #2B2825 */
+    --inverse: 236 230 217;
+    --muted: 106 100 91;       /* #6A645B graphite */
+    --faint: 133 126 115;      /* decorative + large text only */
+    --line: 207 198 180;       /* #CFC6B4 rule */
+    --brand: 235 64 36;        /* #EB4024 beef red: fields (ink on red 4.75:1) */
+    --brand-dark: 181 35 14;   /* #B5230E red text on bone */
+    --brand-soft: 242 214 200;
+    --brand-ink: 18 17 16;     /* type on red */
+    --gain: 26 107 64;         /* #1A6B40 */
+    --gain-soft: 214 228 212;
+    --loss: 139 46 68;         /* #8B2E44 */
+    --loss-soft: 238 218 221;
+    --gold: 134 96 25;
+    --gold-soft: 238 225 195;
+    --chainlink: 72 86 104;
+    --slab: 18 17 16;          /* the contest surface */
+    --slab-2: 31 28 26;
+    --slab-text: 239 233 220;
+    --slab-muted: 143 136 125;
     --shadow-card: none;
-    --shadow-pop: 0 18px 40px -18px rgba(28,25,21,.35);
-    --shimmer: rgba(255,251,243,.55);
+    --shadow-pop: 6px 6px 0 rgb(18 17 16);
+    --shimmer: rgba(255,251,243,.5);
   }
   .dark {
     color-scheme: dark;
-    --bg: 20 18 15;           /* #14120F ink */
-    --surface: 29 26 22;      /* #1D1A16 */
-    --sunken: 14 12 10;
-    --ink: 236 229 215;       /* #ECE5D7 paper-coloured type */
-    --ink-soft: 205 197 182;
-    --inverse: 20 18 15;
-    --muted: 160 151 136;
-    --faint: 117 109 97;
-    --line: 48 43 36;         /* #302B24 */
-    --brand: 226 90 50;       /* #E25A32 */
-    --brand-dark: 240 132 98; /* vermilion text on ink (aa) */
-    --brand-soft: 56 30 21;
-    --brand-ink: 250 196 172;
-    --gain: 132 182 146;      /* #84B692 */
-    --gain-soft: 28 44 33;
-    --loss: 218 140 156;      /* #DA8C9C */
-    --loss-soft: 52 28 34;
+    --bg: 14 13 12;            /* #0E0D0C night */
+    --surface: 26 24 22;       /* #1A1816 */
+    --sunken: 9 8 8;
+    --ink: 234 227 213;        /* #EAE3D5 bone type */
+    --ink-soft: 207 199 184;
+    --inverse: 14 13 12;
+    --muted: 155 148 136;      /* #9B9488 */
+    --faint: 112 105 96;
+    --line: 46 42 38;          /* #2E2A26 */
+    --brand: 255 75 43;        /* #FF4B2B */
+    --brand-dark: 255 116 87;  /* #FF7457 */
+    --brand-soft: 58 26 18;
+    --brand-ink: 14 13 12;
+    --gain: 111 203 147;
+    --gain-soft: 20 44 30;
+    --loss: 229 138 160;
+    --loss-soft: 52 24 32;
     --gold: 212 170 84;
     --gold-soft: 48 38 18;
     --chainlink: 160 174 192;
+    --slab: 26 24 22;
+    --slab-2: 36 33 30;
+    --slab-text: 239 233 220;
+    --slab-muted: 143 136 125;
     --shadow-card: none;
-    --shadow-pop: 0 18px 40px -16px rgba(0,0,0,.7);
-    --shimmer: rgba(236,229,215,.05);
+    --shadow-pop: 6px 6px 0 rgb(0 0 0);
+    --shimmer: rgba(234,227,213,.05);
   }
+  :root { --font-body: var(--font-display); }
   html { background: rgb(var(--bg)); scroll-padding-top: 72px; scroll-padding-bottom: calc(88px + env(safe-area-inset-bottom)); }
   @media (min-width: 1024px) { html { scroll-padding-top: 16px; scroll-padding-bottom: 16px; } }
-  body { @apply bg-bg text-ink font-sans antialiased; overflow-x: hidden; text-rendering: optimizeLegibility; font-feature-settings: "ss01", "cv11"; }
+  body { @apply bg-bg text-ink font-sans antialiased; overflow-x: hidden; text-rendering: optimizeLegibility; }
   * { @apply border-line; }
-  h1, h2, h3, .font-display { font-family: var(--font-display), ui-sans-serif, system-ui, sans-serif; }
-  .num { font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
-  ::selection { background: rgb(var(--brand) / .22); }
-  :focus-visible { @apply outline-none ring-2 ring-brand/70 ring-offset-2 ring-offset-bg rounded-md; }
+  h1, h2, h3 { font-family: var(--font-display), ui-sans-serif, system-ui, sans-serif; }
+  .num { font-family: var(--font-mono), ui-monospace, monospace; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+  ::selection { background: rgb(var(--brand)); color: rgb(18 17 16); }
+  :focus-visible { @apply outline-none; box-shadow: 0 0 0 3px rgb(var(--bg)), 0 0 0 5px rgb(var(--brand)); }
   input, textarea, select { font-size: 16px; } /* prevents ios zoom */
   input[type="checkbox"], input[type="radio"] { accent-color: rgb(var(--ink)); }
   :disabled { cursor: not-allowed; }
@@ -78,32 +87,47 @@
 }
 
 @layer components {
-  /* paper block: flat, hairline, print-like corners. no shadows anywhere. */
-  .card { @apply bg-surface rounded-lg border border-line; }
-  .btn { @apply inline-flex items-center justify-center gap-2 rounded-md font-semibold transition active:translate-y-px disabled:opacity-45 disabled:pointer-events-none select-none; min-height: 46px; @apply px-5 text-[15px]; letter-spacing: -0.005em; }
-  .btn-sm { min-height: 36px; @apply px-3.5 text-sm; }
-  /* vermilion: the one action that matters on a screen */
-  .btn-primary { @apply btn bg-brand text-white hover:bg-brand-ink dark:hover:brightness-110 dark:text-[rgb(20_18_15)]; }
-  .btn-dark { @apply btn bg-ink text-inverse hover:bg-ink-soft; }
-  .btn-ghost { @apply btn bg-transparent text-ink hover:bg-ink/[.06]; }
-  .btn-outline { @apply btn bg-transparent text-ink border border-ink/80 hover:bg-ink hover:text-inverse; }
-  .chip { @apply inline-flex items-center gap-1 rounded-md border border-line bg-transparent px-3 py-1.5 text-sm font-medium text-ink-soft transition hover:border-ink/40; min-height: 36px; }
-  .chip-active { @apply bg-ink text-inverse border-ink hover:border-ink; }
-  .input { @apply w-full rounded-md border border-line bg-surface px-3.5 py-3 text-[16px] text-ink placeholder:text-faint focus:border-ink focus:outline-none; }
-  .label { @apply mb-1.5 block text-sm font-medium text-ink-soft; }
-  /* tickers read like a jersey number: condensed, boxed in ink */
-  .ticker { @apply inline-flex items-center rounded-[3px] border border-ink/70 px-1.5 text-[12px] font-bold uppercase text-ink; font-family: var(--font-display), sans-serif; font-stretch: 78%; letter-spacing: .04em; line-height: 18px; }
-  /* section labels: small caps over a hairline rule, like a newspaper section */
-  .section-title { @apply text-[12px] font-bold uppercase text-ink; font-family: var(--font-display), sans-serif; font-stretch: 80%; letter-spacing: .12em; }
+  /* surfaces: used only where something is a contest or interactive. square, framed in ink. */
+  .card { @apply bg-surface border border-line; border-radius: 0; }
+  .frame { @apply border-2 border-ink; }
+  .slab { background: rgb(var(--slab)); color: rgb(var(--slab-text)); }
+  .slab .muted-s { color: rgb(var(--slab-muted)); }
+  .field { @apply bg-brand; color: rgb(18 17 16); }
+
+  /* buttons: square, heavy, no pills */
+  .btn { @apply inline-flex items-center justify-center gap-2 font-bold transition-[background,color,transform] active:translate-x-px active:translate-y-px disabled:opacity-40 disabled:pointer-events-none select-none; border-radius: 0; min-height: 48px; @apply px-5 text-[15px]; }
+  .btn-sm { min-height: 38px; @apply px-3.5 text-[13.5px]; }
+  .btn-primary { @apply btn bg-brand hover:bg-ink hover:text-inverse; color: rgb(18 17 16); }
+  .btn-dark { @apply btn bg-ink text-inverse hover:bg-brand; }
+  .dark .btn-dark:hover, .btn-dark:hover { color: rgb(18 17 16); }
+  .btn-ghost { @apply btn bg-transparent text-ink hover:bg-ink/[.07]; }
+  .btn-outline { @apply btn bg-transparent text-ink border-2 border-ink hover:bg-ink hover:text-inverse; }
+  .chip { @apply inline-flex items-center gap-1 border-2 border-ink/80 bg-transparent px-3 text-[12px] font-bold uppercase tracking-[.06em] text-ink transition hover:bg-ink/[.07]; font-family: var(--font-mono), monospace; border-radius: 0; min-height: 34px; }
+  .chip-active { @apply bg-ink text-inverse border-ink hover:bg-ink; }
+  .input { @apply w-full border-0 border-b-2 border-ink bg-transparent px-0.5 py-3 text-[17px] text-ink placeholder:text-faint focus:outline-none focus:border-brand; border-radius: 0; }
+  .label { @apply mb-1.5 block text-[11px] font-bold uppercase tracking-[.1em] text-muted; font-family: var(--font-mono), monospace; }
+
+  /* type roles */
+  .cond { font-family: var(--font-display), sans-serif; font-stretch: 62%; font-weight: 900; text-transform: uppercase; letter-spacing: -0.01em; line-height: .86; }
+  .display-cond { @apply cond; }
+  .meta { font-family: var(--font-mono), monospace; font-size: 10.5px; letter-spacing: .07em; text-transform: uppercase; }
+  .serif { font-family: var(--font-serif), Georgia, serif; font-style: italic; font-weight: 400; }
+  .ticker { @apply cond text-[15px] text-ink; line-height: 1; }
+  .section-title { @apply meta font-bold text-ink; font-size: 11px; }
   .rule-title { @apply flex items-center gap-3; }
-  .rule-title::after { content: ""; @apply h-px flex-1 bg-ink/80; }
-  .display-cond { font-family: var(--font-display), sans-serif; font-stretch: 75%; letter-spacing: -0.01em; }
-  .kicker { @apply text-[11px] font-bold uppercase text-brand-dark; font-family: var(--font-display), sans-serif; font-stretch: 80%; letter-spacing: .14em; }
-  /* the result stamp: inked, slightly crooked, unmistakably beef */
-  .stamp { @apply inline-flex items-center border-[2.5px] px-2.5 py-0.5 font-extrabold uppercase; font-family: var(--font-display), sans-serif; font-stretch: 75%; letter-spacing: .06em; border-radius: 4px; transform: rotate(-4deg); }
-  .skeleton { @apply relative overflow-hidden rounded-md bg-ink/[.07]; }
+  .rule-title::after { content: ""; @apply h-[2px] flex-1 bg-ink; }
+  .kicker { @apply meta font-bold text-brand-dark; }
+
+  /* final stamp */
+  .stamp { @apply inline-flex items-center border-[3px] px-2 cond; font-size: 22px; line-height: 1.1; transform: rotate(-5deg); }
+  .skeleton { @apply relative overflow-hidden bg-ink/[.08]; }
   .skeleton::after { content: ""; @apply absolute inset-0 -translate-x-full; background: linear-gradient(90deg, transparent, var(--shimmer), transparent); animation: shimmer 1.4s infinite; }
+
+  /* the ticker tape */
+  .tape-run { display: inline-flex; animation: tape 60s linear infinite; }
 }
+
+@keyframes tape { to { transform: translateX(-50%); } }
 
 .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
 .pt-safe { padding-top: env(safe-area-inset-top); }

@@ -6,9 +6,9 @@ import { AppShell } from "@/components/shell";
 import { THEME_COLORS, THEME_SCRIPT } from "@/lib/theme-script";
 
 // self-hosted (ofl): no runtime font requests, no new dependencies
-const display = localFont({ src: "./fonts/bricolage-grotesque.woff2", variable: "--font-display", weight: "200 800", display: "swap", declarations: [{ prop: "font-stretch", value: "75% 100%" }] });
-const body = localFont({ src: "./fonts/instrument-sans.woff2", variable: "--font-body", weight: "400 700", display: "swap", declarations: [{ prop: "font-stretch", value: "75% 100%" }] });
+const archivo = localFont({ src: "./fonts/archivo.woff2", variable: "--font-display", weight: "100 900", display: "swap", declarations: [{ prop: "font-stretch", value: "62% 125%" }] });
 const mono = localFont({ src: "./fonts/jetbrains-mono.woff2", variable: "--font-mono", weight: "100 800", display: "swap" });
+const serif = localFont({ src: "./fonts/newsreader-italic.woff2", variable: "--font-serif", weight: "400", style: "italic", display: "swap" });
 
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"),
@@ -41,7 +41,7 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     // suppressHydrationWarning: the theme script sets class/style on <html> before react hydrates
-    <html lang="en" suppressHydrationWarning className={`${display.variable} ${body.variable} ${mono.variable}`}>
+    <html lang="en" suppressHydrationWarning className={`${archivo.variable} ${mono.variable} ${serif.variable}`}>
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
       </head>

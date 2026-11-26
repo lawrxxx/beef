@@ -187,19 +187,21 @@ function NewDuelInner() {
         <button className="btn-ghost btn-sm !h-10 !w-10 !px-0" onClick={() => (step ? setStep(step - 1) : router.back())} aria-label="back"><ArrowLeft size={20} /></button>
         <div className="min-w-0 flex-1">
           <p className="kicker num">step {String(step + 1).padStart(2, "0")} / {String(STEPS.length).padStart(2, "0")}</p>
-          <h1 className="font-display text-[24px] font-bold leading-tight tracking-[-0.03em]">{STEPS[step].title}</h1>
+          <h1 className="cond text-[34px] leading-[.9]">{STEPS[step].title}</h1>
         </div>
         <Link href="/duel" className="btn-ghost btn-sm !h-10 !w-10 !px-0" aria-label="cancel"><X size={20} /></Link>
       </div>
-      <div className="mb-5 flex gap-[3px]" aria-hidden>{STEPS.map((_, i) => <div key={i} className={cx("h-[3px] flex-1", i === step ? "bg-brand" : i < step ? "bg-ink" : "bg-ink/15")} />)}</div>
+      <div className="mb-5 flex gap-[3px]" aria-hidden>{STEPS.map((_, i) => <div key={i} className={cx("h-[6px] flex-1", i === step ? "bg-brand" : i < step ? "bg-ink" : "bg-ink/15")} />)}</div>
 
-      {/* running summary */}
+      {/* tale of the tape: the matchup fills in as you build it */}
       {step > 0 && step < 5 && (
-        <div className="mb-5 flex flex-wrap items-center justify-center gap-x-2 gap-y-1 border-y border-line py-2.5 text-sm">
-          <span className="text-muted">{mode === "open" ? "open challenge" : opponents.map((id) => `@${userById(id)?.username}`).join(", ")}</span>
-          {picked.some(Boolean) && <span className="font-bold">· {picked.map((t) => t ?? "?").join(" vs ")}</span>}
-          {step > 2 && mine && <span className="text-muted">· you: <b className="text-ink">{mine}</b></span>}
-          {step > 3 && <span className="text-muted">· {stakeLabel} test usdc each</span>}
+        <div className="slab -mx-4 mb-5 px-4 py-3 lg:mx-0">
+          <p className="meta muted-s">tale of the tape{step > 3 && ` · ${stakeLabel} each`}</p>
+          <div className="mt-1.5 grid grid-cols-[1fr_auto_1fr] items-end gap-2">
+            <div className="min-w-0"><p className="meta muted-s truncate">you</p><p className={cx("cond truncate text-[34px] leading-[.85]", !mine && "opacity-40")}>{mine ?? (picked[0] ?? "?")}</p></div>
+            <span className="serif pb-1 text-slab-muted">vs</span>
+            <div className="min-w-0 text-right"><p className="meta muted-s truncate">{mode === "open" ? "anyone" : opponents.map((id) => userById(id)?.displayName.split(" ")[0]).join(", ")}</p><p className={cx("cond truncate text-[34px] leading-[.85]", !theirStocks[0] && !picked[1] && "opacity-40")}>{mine ? (theirStocks.join(" · ") || "?") : (picked[1] ?? "?")}</p></div>
+          </div>
         </div>
       )}
 
@@ -212,9 +214,9 @@ function NewDuelInner() {
               ["group", "group", "up to 6 people", <Users key="u" size={16} />],
             ] as const).map(([m, label, sub, icon]) => (
               <button key={m} onClick={() => { setMode(m); if (m === "open") setOpponents([]); if (m === "friend") setOpponents((o) => o.slice(0, 1)); }}
-                className={cx("rounded-md border-2 p-3 text-left transition", mode === m ? "border-ink bg-surface" : "border-line hover:border-ink/40")} aria-pressed={mode === m}>
+                className={cx("border-[3px] p-3 text-left transition", mode === m ? "field border-brand" : "border-ink hover:bg-ink/[.06]")} aria-pressed={mode === m}>
                 <span className="flex items-center gap-1.5 text-sm font-semibold">{icon}{label}</span>
-                <span className="block text-xs text-muted">{sub}</span>
+                <span className="block text-xs opacity-70">{sub}</span>
               </button>
             ))}
           </div>
@@ -252,8 +254,8 @@ function NewDuelInner() {
             {Array.from({ length: slots }).map((_, i) => {
               const t = stocks[i] ?? null;
               const node = (
-                <button key={i} onClick={() => setActiveSlot(i)} className={cx("rounded-md border-2 p-3 text-center transition", activeSlot === i ? "border-ink bg-surface" : "border-line")} aria-label={`stock ${i + 1}${t ? `: ${t}` : ""}`}>
-                  <span className={cx("display-cond block text-[32px] font-bold leading-none", !t && "text-faint")}>{t ?? "?"}</span>
+                <button key={i} onClick={() => setActiveSlot(i)} className={cx("border-[3px] p-3 text-center transition", activeSlot === i ? "border-brand" : "border-ink")} aria-label={`stock ${i + 1}${t ? `: ${t}` : ""}`}>
+                  <span className={cx("cond block text-[40px] leading-none", !t && "text-faint")}>{t ?? "?"}</span>
                   <span className="block truncate text-xs text-muted">{t ? getAsset(t)?.name : `stock ${i + 1}`}</span>
                 </button>
               );
@@ -269,9 +271,9 @@ function NewDuelInner() {
           <div className={cx("grid gap-2", slots === 2 ? "grid-cols-2" : "grid-cols-3")}>
             {picked.map((t) => (
               <button key={t} onClick={() => setMine(t)} aria-pressed={mine === t}
-                className={cx("rounded-md border-2 p-4 text-center transition", mine === t ? "border-ink bg-ink text-inverse" : "border-line hover:border-ink/40")}>
-                <span className="display-cond block text-[44px] font-bold leading-none">{t}</span>
-                <span className={cx("block truncate text-xs", mine === t ? "text-inverse/70" : "text-muted")}>{mine === t ? "your pick" : getAsset(t!)?.name}</span>
+                className={cx("border-[3px] p-4 text-center transition", mine === t ? "field border-brand" : "border-ink hover:bg-ink/[.06]")}>
+                <span className="cond block text-[56px] leading-none">{t}</span>
+                <span className={cx("meta mt-1 block truncate", mine === t ? "font-bold" : "text-muted")}>{mine === t ? "your pick" : getAsset(t!)?.name}</span>
               </button>
             ))}
           </div>
@@ -300,13 +302,17 @@ function NewDuelInner() {
 
       {step === 3 && (
         <div>
-          <div className="grid grid-cols-6 gap-1.5">
-            {STAKE_PRESETS.map((v) => (
+          <div className="flex items-baseline gap-2 border-b-[3px] border-ink pb-1">
+            <span className={cx("num text-[76px] font-bold leading-none tracking-[-0.05em]", !stakeCheck.ok && "text-faint")}>{stakeLabel}</span>
+            <span className="meta text-muted">test usdc each</span>
+          </div>
+          <div className="mt-3 grid grid-cols-6 border-2 border-ink">
+            {STAKE_PRESETS.map((v, i) => (
               <button key={v} onClick={() => setStakeChoice(v)} aria-pressed={stakeChoice === v}
-                className={cx("display-cond num min-w-0 rounded-md border-2 py-2 text-[22px] font-bold transition", stakeChoice === v ? "border-ink bg-ink text-inverse" : "border-line hover:border-ink/40")}>{v}</button>
+                className={cx("num min-w-0 py-2.5 text-[17px] font-bold transition", i > 0 && "border-l-2 border-ink", stakeChoice === v ? "bg-ink text-inverse" : "hover:bg-ink/[.07]")}>{v}</button>
             ))}
             <button onClick={() => setStakeChoice("custom")} aria-pressed={stakeChoice === "custom"}
-              className={cx("min-w-0 rounded-md border-2 py-2.5 text-[13px] font-bold transition", stakeChoice === "custom" ? "border-ink bg-ink text-inverse" : "border-line hover:border-ink/40")}>custom</button>
+              className={cx("meta min-w-0 border-l-2 border-ink py-2.5 font-bold transition", stakeChoice === "custom" ? "bg-ink text-inverse" : "hover:bg-ink/[.07]")}>other</button>
           </div>
           {stakeChoice === "custom" && (
             <div className="mt-2.5">
@@ -323,14 +329,9 @@ function NewDuelInner() {
             </div>
           )}
           <StakeBalance stakeUnits={stakeU} onStatus={setWallet} />
-          <div className="mt-4 grid grid-cols-3 border-y-2 border-ink">
-            {[["your stake", stakeLabel, false], [participants > 2 ? `each of ${participants - 1} friends` : "their stake", stakeLabel, false], ["prize pool", potLabel, true]].map(([k, v, pot], i) => (
-              <div key={String(k)} className={cx("min-w-0 py-3", i > 0 && "border-l border-line pl-3")}>
-                <p className="truncate text-[10.5px] font-semibold uppercase tracking-[.12em] text-muted">{k}</p>
-                <p className={cx("num display-cond mt-1 truncate text-[30px] font-bold leading-none", pot && "text-brand-dark")}>{v}</p>
-                <p className="mt-0.5 text-[11px] text-muted">test usdc</p>
-              </div>
-            ))}
+          <div className="field mt-4 flex items-end justify-between gap-3 px-4 py-3">
+            <div className="min-w-0"><p className="meta font-bold">prize pool</p><p className="cond mt-1 truncate text-[64px] leading-[.8]">{potLabel}</p></div>
+            <p className="meta pb-1 text-right font-bold">{participants > 2 ? `${participants} players` : "winner"}<br />takes all</p>
           </div>
           <p className="mt-3 text-[13px] text-muted">everyone puts in the same stake and the winner takes the pool; a draw returns every stake. stakes are test usdc on base sepolia (no monetary value), held by the beef escrow.</p>
         </div>
@@ -344,7 +345,7 @@ function NewDuelInner() {
               const end = t === "custom" ? (customDate && !customError ? customDate : null) : presetDeadline(t);
               return (
                 <button key={t} type="button" role="radio" aria-checked={on} onClick={() => setExpiration(t)}
-                  className={cx("flex w-full items-start justify-between gap-3 rounded-md border-2 p-4 text-left transition", on ? "border-ink bg-surface" : "border-line hover:border-ink/40")}>
+                  className={cx("flex w-full items-start justify-between gap-3 border-[3px] p-4 text-left transition", on ? "border-brand bg-brand/[.08]" : "border-ink hover:bg-ink/[.05]")}>
                   <div className="min-w-0">
                     <p className="font-semibold">{EXPIRATION_COPY[t].label}</p>
                     <p className="text-[13px] text-muted">{EXPIRATION_COPY[t].description}</p>
