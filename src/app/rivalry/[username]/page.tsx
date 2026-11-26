@@ -30,12 +30,12 @@ function RivalryInner() {
         <p className="section-title">rivalry</p>
         <div className="mt-4 grid grid-cols-[1fr_auto_1fr] items-center gap-3">
           <div className="flex flex-col items-center"><Avatar user={a} size={64} /><p className="mt-2 font-semibold">{isMe ? "you" : a.displayName}</p></div>
-          <p className="num font-display text-4xl font-extrabold">{r.wins}<span className="text-faint">–</span>{r.losses}</p>
+          <p className="num display-cond text-[64px] font-bold leading-none">{r.wins}<span className="mx-1 text-brand">–</span>{r.losses}</p>
           <div className="flex flex-col items-center"><Avatar user={them} size={64} /><p className="mt-2 font-semibold">{them.displayName}</p></div>
         </div>
         <p className="mt-3 text-sm text-muted">{r.duels.length} total duels · {r.draws} draws</p>
         {r.streak.count > 0 && (
-          <p className="mt-2 inline-flex items-center gap-1 rounded-full bg-brand-soft px-3 py-1 text-sm font-semibold text-brand-ink">
+          <p className="mt-2 inline-flex items-center gap-1 border-y border-brand px-1 py-0.5 text-sm font-semibold text-brand-dark">
             <Flame size={14} /> {r.streak.who === "me" ? (isMe ? "you've" : `${a.displayName} has`) : `${them.displayName} has`} won {r.streak.count} in a row
           </p>
         )}

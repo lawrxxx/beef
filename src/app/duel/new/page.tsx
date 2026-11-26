@@ -20,7 +20,7 @@ import { absoluteUrl, shareLink, toast } from "@/components/share";
 // wallet code (viem + cdp) only loads for the funding step
 const FundCard = dynamic(() => import("@/components/wallet/duel-funding").then((m) => m.DuelFunding), { ssr: false });
 const StakeBalance = dynamic(() => import("@/components/wallet/stake-balance").then((m) => m.StakeBalance), {
-  ssr: false, loading: () => <div className="mt-3 rounded-2xl border px-3 py-2.5"><div className="skeleton h-5 w-48" /></div>,
+  ssr: false, loading: () => <div className="mt-3 rounded-lg border px-3 py-2.5"><div className="skeleton h-5 w-48" /></div>,
 });
 
 const STEPS = [
@@ -186,16 +186,16 @@ function NewDuelInner() {
       <div className="mb-3 flex items-center gap-2">
         <button className="btn-ghost btn-sm !h-10 !w-10 !px-0" onClick={() => (step ? setStep(step - 1) : router.back())} aria-label="back"><ArrowLeft size={20} /></button>
         <div className="min-w-0 flex-1">
-          <p className="text-xs font-semibold text-muted">step {step + 1} of {STEPS.length}</p>
-          <h1 className="font-display text-xl font-bold leading-tight">{STEPS[step].title}</h1>
+          <p className="kicker num">step {String(step + 1).padStart(2, "0")} / {String(STEPS.length).padStart(2, "0")}</p>
+          <h1 className="font-display text-[24px] font-bold leading-tight tracking-[-0.03em]">{STEPS[step].title}</h1>
         </div>
         <Link href="/duel" className="btn-ghost btn-sm !h-10 !w-10 !px-0" aria-label="cancel"><X size={20} /></Link>
       </div>
-      <div className="mb-4 flex gap-1" aria-hidden>{STEPS.map((_, i) => <div key={i} className={cx("h-1 flex-1 rounded-full", i <= step ? "bg-ink" : "bg-ink/10")} />)}</div>
+      <div className="mb-5 flex gap-[3px]" aria-hidden>{STEPS.map((_, i) => <div key={i} className={cx("h-[3px] flex-1", i === step ? "bg-brand" : i < step ? "bg-ink" : "bg-ink/15")} />)}</div>
 
       {/* running summary */}
       {step > 0 && step < 5 && (
-        <div className="mb-4 flex flex-wrap items-center justify-center gap-x-2 gap-y-1 rounded-2xl bg-surface px-3 py-2.5 text-sm shadow-card">
+        <div className="mb-5 flex flex-wrap items-center justify-center gap-x-2 gap-y-1 border-y border-line py-2.5 text-sm">
           <span className="text-muted">{mode === "open" ? "open challenge" : opponents.map((id) => `@${userById(id)?.username}`).join(", ")}</span>
           {picked.some(Boolean) && <span className="font-bold">· {picked.map((t) => t ?? "?").join(" vs ")}</span>}
           {step > 2 && mine && <span className="text-muted">· you: <b className="text-ink">{mine}</b></span>}
@@ -212,30 +212,30 @@ function NewDuelInner() {
               ["group", "group", "up to 6 people", <Users key="u" size={16} />],
             ] as const).map(([m, label, sub, icon]) => (
               <button key={m} onClick={() => { setMode(m); if (m === "open") setOpponents([]); if (m === "friend") setOpponents((o) => o.slice(0, 1)); }}
-                className={cx("card p-3 text-left transition", mode === m && "border-ink ring-1 ring-ink")} aria-pressed={mode === m}>
+                className={cx("rounded-md border-2 p-3 text-left transition", mode === m ? "border-ink bg-surface" : "border-line hover:border-ink/40")} aria-pressed={mode === m}>
                 <span className="flex items-center gap-1.5 text-sm font-semibold">{icon}{label}</span>
                 <span className="block text-xs text-muted">{sub}</span>
               </button>
             ))}
           </div>
           {mode === "open" ? (
-            <div className="card mt-3 p-4 text-sm text-ink-soft">anyone on beef can take the other side. great for settling a debate in a community.</div>
+            <p className="mt-4 border-l-[3px] border-brand pl-3 text-[15px] text-ink-soft">anyone on beef can take the other side. great for settling a debate in a community.</p>
           ) : (
             <>
               <div className="relative mt-3">
                 <Search size={17} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-faint" />
                 <input className="input !pl-10" placeholder="search people" value={q} onChange={(e) => setQ(e.target.value)} aria-label="search people" />
               </div>
-              <ul className="card mt-2 max-h-[48dvh] divide-y overflow-y-auto">
+              <ul className="mt-2 max-h-[48dvh] divide-y overflow-y-auto border-y border-line">
                 {friends.length === 0 && <li className="p-4 text-sm text-muted">no one matches “{q}”.</li>}
                 {friends.map((u) => {
                   const on = opponents.includes(u.id);
                   return (
                     <li key={u.id}>
-                      <button className="flex w-full items-center gap-3 px-3 py-2.5 text-left hover:bg-ink/[.02]" onClick={() => toggleOpponent(u.id)} aria-pressed={on}>
+                      <button className="flex w-full items-center gap-3 py-2.5 text-left hover:bg-ink/[.03]" onClick={() => toggleOpponent(u.id)} aria-pressed={on}>
                         <Avatar user={u} size={38} />
                         <span className="min-w-0 flex-1"><span className="block truncate font-semibold">{u.displayName}</span><span className="block truncate text-[13px] text-muted">@{u.username}</span></span>
-                        <span className={cx("flex h-6 w-6 items-center justify-center rounded-full border-2", on ? "border-ink bg-ink text-inverse" : "border-line")}>{on && <Check size={14} />}</span>
+                        <span className={cx("flex h-6 w-6 items-center justify-center rounded-[5px] border-2", on ? "border-ink bg-ink text-inverse" : "border-ink/25")}>{on && <Check size={14} />}</span>
                       </button>
                     </li>
                   );
@@ -252,12 +252,12 @@ function NewDuelInner() {
             {Array.from({ length: slots }).map((_, i) => {
               const t = stocks[i] ?? null;
               const node = (
-                <button key={i} onClick={() => setActiveSlot(i)} className={cx("rounded-2xl border-2 bg-surface p-3 text-center transition", activeSlot === i ? "border-ink" : "border-line")} aria-label={`stock ${i + 1}${t ? `: ${t}` : ""}`}>
-                  <span className="block font-display text-xl font-extrabold">{t ?? "?"}</span>
+                <button key={i} onClick={() => setActiveSlot(i)} className={cx("rounded-md border-2 p-3 text-center transition", activeSlot === i ? "border-ink bg-surface" : "border-line")} aria-label={`stock ${i + 1}${t ? `: ${t}` : ""}`}>
+                  <span className={cx("display-cond block text-[32px] font-bold leading-none", !t && "text-faint")}>{t ?? "?"}</span>
                   <span className="block truncate text-xs text-muted">{t ? getAsset(t)?.name : `stock ${i + 1}`}</span>
                 </button>
               );
-              return slots === 2 && i === 1 ? [<span key="vs" className="text-xs font-bold text-faint">vs</span>, node] : node;
+              return slots === 2 && i === 1 ? [<span key="vs" className="font-display text-[15px] italic text-faint">vs</span>, node] : node;
             })}
           </div>
           <StockPicker value={stocks[activeSlot] ?? undefined} onChange={pickStock} exclude={picked.filter((t, i) => t && i !== activeSlot) as string[]} />
@@ -269,17 +269,17 @@ function NewDuelInner() {
           <div className={cx("grid gap-2", slots === 2 ? "grid-cols-2" : "grid-cols-3")}>
             {picked.map((t) => (
               <button key={t} onClick={() => setMine(t)} aria-pressed={mine === t}
-                className={cx("rounded-2xl border-2 p-4 text-center transition", mine === t ? "border-ink bg-ink text-inverse" : "border-line bg-surface hover:border-ink/30")}>
-                <span className="block font-display text-2xl font-extrabold">{t}</span>
+                className={cx("rounded-md border-2 p-4 text-center transition", mine === t ? "border-ink bg-ink text-inverse" : "border-line hover:border-ink/40")}>
+                <span className="display-cond block text-[44px] font-bold leading-none">{t}</span>
                 <span className={cx("block truncate text-xs", mine === t ? "text-inverse/70" : "text-muted")}>{mine === t ? "your pick" : getAsset(t!)?.name}</span>
               </button>
             ))}
           </div>
           {mine && mode !== "group" && <p className="text-center text-[15px] text-ink-soft">you're backing <b>{mine}</b>. {mode === "open" ? "your opponent" : userById(opponents[0])?.displayName} gets <b>{theirStocks[0]}</b>.</p>}
           {mine && mode === "group" && (
-            <div className="card divide-y">
+            <div className="divide-y border-y border-line">
               {groupAssign.map((g) => (
-                <div key={g.userId} className="flex items-center gap-3 px-3 py-2.5">
+                <div key={g.userId} className="flex items-center gap-3 py-2.5">
                   <Avatar user={userById(g.userId)} size={32} />
                   <span className="flex-1 truncate text-sm font-semibold">{userById(g.userId)?.displayName}</span>
                   <select className="input !w-28 !py-1.5 text-sm" value={g.ticker} aria-label={`stock for ${userById(g.userId)?.username}`}
@@ -294,7 +294,7 @@ function NewDuelInner() {
               ))}
             </div>
           )}
-          <p className="flex items-start gap-2 rounded-xl bg-ink/[.03] p-3 text-[13px] text-ink-soft"><Info size={16} className="mt-0.5 shrink-0" />whoever's stock has the higher percentage return wins. a $30 stock can beat a $900 one.</p>
+          <p className="flex items-start gap-2 text-[13px] text-muted"><Info size={15} className="mt-0.5 shrink-0" />whoever's stock has the higher percentage return wins. a $30 stock can beat a $900 one.</p>
         </div>
       )}
 
@@ -303,10 +303,10 @@ function NewDuelInner() {
           <div className="grid grid-cols-6 gap-1.5">
             {STAKE_PRESETS.map((v) => (
               <button key={v} onClick={() => setStakeChoice(v)} aria-pressed={stakeChoice === v}
-                className={cx("min-w-0 rounded-xl border-2 py-2.5 font-display text-lg font-bold transition", stakeChoice === v ? "border-ink bg-ink text-inverse" : "border-line bg-surface")}>{v}</button>
+                className={cx("display-cond num min-w-0 rounded-md border-2 py-2 text-[22px] font-bold transition", stakeChoice === v ? "border-ink bg-ink text-inverse" : "border-line hover:border-ink/40")}>{v}</button>
             ))}
             <button onClick={() => setStakeChoice("custom")} aria-pressed={stakeChoice === "custom"}
-              className={cx("min-w-0 rounded-xl border-2 py-2.5 font-display text-[13px] font-bold transition", stakeChoice === "custom" ? "border-ink bg-ink text-inverse" : "border-line bg-surface")}>custom</button>
+              className={cx("min-w-0 rounded-md border-2 py-2.5 text-[13px] font-bold transition", stakeChoice === "custom" ? "border-ink bg-ink text-inverse" : "border-line hover:border-ink/40")}>custom</button>
           </div>
           {stakeChoice === "custom" && (
             <div className="mt-2.5">
@@ -323,10 +323,14 @@ function NewDuelInner() {
             </div>
           )}
           <StakeBalance stakeUnits={stakeU} onStatus={setWallet} />
-          <div className="mt-2.5 grid grid-cols-3 gap-2 text-center">
-            <div className="card min-w-0 p-2.5"><p className="text-xs text-muted">your stake</p><p className="num mt-0.5 truncate font-display text-lg font-bold">{stakeLabel}</p><p className="text-[10px] text-muted">test usdc</p></div>
-            <div className="card min-w-0 p-2.5"><p className="text-xs text-muted">{participants > 2 ? `each of ${participants - 1} friends` : "their stake"}</p><p className="num mt-0.5 truncate font-display text-lg font-bold">{stakeLabel}</p><p className="text-[10px] text-muted">test usdc</p></div>
-            <div className="card min-w-0 border-ink/20 bg-ink p-2.5 text-inverse"><p className="text-xs text-inverse/70">prize pool</p><p className="num mt-0.5 truncate font-display text-lg font-bold">{potLabel}</p><p className="text-[10px] text-inverse/70">test usdc</p></div>
+          <div className="mt-4 grid grid-cols-3 border-y-2 border-ink">
+            {[["your stake", stakeLabel, false], [participants > 2 ? `each of ${participants - 1} friends` : "their stake", stakeLabel, false], ["prize pool", potLabel, true]].map(([k, v, pot], i) => (
+              <div key={String(k)} className={cx("min-w-0 py-3", i > 0 && "border-l border-line pl-3")}>
+                <p className="truncate text-[10.5px] font-semibold uppercase tracking-[.12em] text-muted">{k}</p>
+                <p className={cx("num display-cond mt-1 truncate text-[30px] font-bold leading-none", pot && "text-brand-dark")}>{v}</p>
+                <p className="mt-0.5 text-[11px] text-muted">test usdc</p>
+              </div>
+            ))}
           </div>
           <p className="mt-3 text-[13px] text-muted">everyone puts in the same stake and the winner takes the pool; a draw returns every stake. stakes are test usdc on base sepolia (no monetary value), held by the beef escrow.</p>
         </div>
@@ -340,7 +344,7 @@ function NewDuelInner() {
               const end = t === "custom" ? (customDate && !customError ? customDate : null) : presetDeadline(t);
               return (
                 <button key={t} type="button" role="radio" aria-checked={on} onClick={() => setExpiration(t)}
-                  className={cx("card flex w-full items-start justify-between gap-3 p-4 text-left transition", on && "border-ink ring-1 ring-ink")}>
+                  className={cx("flex w-full items-start justify-between gap-3 rounded-md border-2 p-4 text-left transition", on ? "border-ink bg-surface" : "border-line hover:border-ink/40")}>
                   <div className="min-w-0">
                     <p className="font-semibold">{EXPIRATION_COPY[t].label}</p>
                     <p className="text-[13px] text-muted">{EXPIRATION_COPY[t].description}</p>
@@ -351,7 +355,7 @@ function NewDuelInner() {
                       </p>
                     ) : t === "custom" && <p className="mt-1 text-[13px] text-muted">choose below</p>}
                   </div>
-                  <span className={cx("mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2", on ? "border-ink bg-ink text-inverse" : "border-line")}>{on && <Check size={14} />}</span>
+                  <span className={cx("mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-[5px] border-2", on ? "border-ink bg-ink text-inverse" : "border-ink/25")}>{on && <Check size={14} />}</span>
                 </button>
               );
             })}
@@ -367,7 +371,7 @@ function NewDuelInner() {
             </div>
           )}
           <p className="text-[12px] text-muted">if accepted now, starting prices would lock at {etLabel(startIfNow)} ({localLabel(startIfNow)}).</p>
-          <p className="flex items-start gap-2 rounded-xl bg-ink/[.03] p-3 text-[13px] text-ink-soft">
+          <p className="flex items-start gap-2 border-l-[3px] border-ink/70 py-1 pl-3 text-[13px] text-ink-soft">
             <Info size={16} className="mt-0.5 shrink-0" />
             starting prices lock at the selected market open after both players accept. at the deadline, beef compares the latest valid chainlink feed prices using the same methodology. invalid or unavailable prices pause settlement.
           </p>
@@ -376,7 +380,7 @@ function NewDuelInner() {
 
       {step === 5 && (
         <div className="space-y-3">
-          <div className="card divide-y">
+          <div className="divide-y border-y-2 border-ink">
             {[
               ["against", mode === "open" ? "open challenge · first to accept" : opponents.map((id) => `@${userById(id)?.username}`).join(", ")],
               ["you back", mine!],
@@ -386,7 +390,7 @@ function NewDuelInner() {
               ["prize pool", `${potLabel} test usdc · winner takes all`],
               ["starts", `the next market open after acceptance (if accepted now: ${etLabel(startIfNow)})`],
               ["deadline", expiration === "custom" && deadline ? `${etLabel(new Date(deadline.deadline))} · your time ${localLabel(new Date(deadline.deadline))}` : `${EXPIRATION_COPY[expiration].label} (if accepted now: ${deadline ? etLabel(new Date(deadline.deadline)) : "—"})`],
-              ["prices lock", "first official close after everyone's in"],
+              ["prices lock", "first chainlink feed update at or after the start"],
               ["network", "base sepolia (testnet)"],
               ["token", "usdc by circle (test, no monetary value)"],
               ["fees", "none · gas covered by beef"],
@@ -409,7 +413,7 @@ function NewDuelInner() {
       )}
 
       {/* footer */}
-      <div className="sticky bottom-[calc(72px+env(safe-area-inset-bottom))] mt-5 bg-bg/90 pb-2 pt-2 backdrop-blur lg:bottom-0">
+      <div className="sticky bottom-[calc(72px+env(safe-area-inset-bottom))] mt-5 border-t border-line bg-bg pb-2 pt-3 lg:bottom-0">
         {blocked && (step !== 1 || picked.some(Boolean)) && <p className="mb-2 text-center text-[13px] text-muted" role="status">{blocked}</p>}
         {step < 5 ? (
           <button className="btn-dark w-full" disabled={!!blocked} onClick={() => setStep(step + 1)}>continue</button>

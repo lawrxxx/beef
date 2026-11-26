@@ -17,7 +17,7 @@ export function ThemeSelector({ className }: { className?: string }) {
   const mounted = useMounted();
   const value = mounted ? pref : null; // the saved choice is only known in the browser
   return (
-    <div role="radiogroup" aria-label="appearance" className={cx("grid grid-cols-3 gap-1 rounded-xl bg-ink/[.05] p-1", className)}>
+    <div role="radiogroup" aria-label="appearance" className={cx("grid grid-cols-3 gap-1 rounded-md bg-ink/[.05] p-1", className)}>
       {OPTIONS.map(({ value: v, label, Icon }) => {
         const on = value === v;
         return (

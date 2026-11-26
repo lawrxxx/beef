@@ -3,65 +3,74 @@
 @tailwind utilities;
 
 @layer base {
-  /* light: the original beef palette, unchanged */
+  /*
+   * beef identity: paper, ink and a vermilion stamp.
+   * light is warm newsprint; dark is deep ink with paper-coloured type (not an inversion).
+   * roles: bg (page) · surface (raised paper, used sparingly) · sunken (wells, tracks) · ink (type, primary actions)
+   * line (hairlines) · brand (vermilion: one action per screen, wins, the stamp) · gain/loss (muted moss / plum)
+   * gold (ochre: crowns, streaks, warnings) · slate (chainlink, info).
+   */
   :root {
     color-scheme: light;
     -webkit-tap-highlight-color: transparent;
-    --bg: 246 245 242;        /* #F6F5F2 warm off-white */
-    --surface: 255 255 255;
-    --ink: 29 29 31;          /* #1D1D1F */
-    --ink-soft: 58 58 61;
-    --inverse: 255 255 255;
-    --muted: 110 110 115;
-    --faint: 161 161 166;
-    --line: 231 229 224;
-    --brand: 229 85 44;       /* #E5552C beef orange */
-    --brand-dark: 199 67 29;
-    --brand-soft: 252 234 227;
-    --brand-ink: 142 46 18;
-    --gain: 17 145 90;
-    --gain-soft: 227 244 235;
-    --loss: 211 63 73;
-    --loss-soft: 251 231 232;
-    --gold: 183 135 28;
-    --gold-soft: 251 241 217;
-    --chainlink: 55 91 210;
-    --shadow-card: 0 1px 2px rgba(20,20,20,0.04), 0 1px 1px rgba(20,20,20,0.02);
-    --shadow-pop: 0 8px 30px rgba(20,20,20,0.10);
-    --shimmer: rgba(255,255,255,.6);
+    --bg: 242 237 227;        /* #F2EDE3 newsprint */
+    --surface: 250 247 241;   /* #FAF7F1 fresh paper */
+    --sunken: 232 225 212;    /* #E8E1D4 */
+    --ink: 28 25 21;          /* #1C1915 warm ink */
+    --ink-soft: 61 55 47;
+    --inverse: 248 244 236;
+    --muted: 112 104 92;      /* #70685C */
+    --faint: 133 124 109;  /* #857C6D: decorative + large text only */
+    --line: 220 211 196;      /* #DCD3C4 */
+    --brand: 205 66 28;       /* #CD421C vermilion */
+    --brand-dark: 172 52 20;  /* vermilion text on paper (aa) */
+    --brand-soft: 243 221 208;
+    --brand-ink: 122 36 12;
+    --gain: 46 110 76;        /* #2E6E4C moss */
+    --gain-soft: 221 233 220;
+    --loss: 138 52 72;        /* #8A3448 plum */
+    --loss-soft: 239 221 224;
+    --gold: 134 96 25;        /* #866019 ochre */
+    --gold-soft: 240 228 198;
+    --chainlink: 72 86 104;   /* slate */
+    --shadow-card: none;
+    --shadow-pop: 0 18px 40px -18px rgba(28,25,21,.35);
+    --shimmer: rgba(255,251,243,.55);
   }
-  /* dark: deep charcoal, lifted cards, the same orange. no neon, no glow. */
   .dark {
     color-scheme: dark;
-    --bg: 18 18 20;           /* #121214 */
-    --surface: 28 28 31;      /* #1C1C1F */
-    --ink: 245 245 247;
-    --ink-soft: 210 210 215;
-    --inverse: 18 18 20;
-    --muted: 156 156 163;
-    --faint: 118 118 125;
-    --line: 46 46 51;
-    --brand: 233 94 54;       /* a touch lighter so it reads on charcoal */
-    --brand-dark: 255 133 99; /* used for orange text/links: lighter in dark */
-    --brand-soft: 58 32 24;
-    --brand-ink: 255 186 163;
-    --gain: 52 199 123;
-    --gain-soft: 18 50 34;
-    --loss: 255 99 108;
-    --loss-soft: 60 26 30;
-    --gold: 227 179 65;
-    --gold-soft: 52 42 16;
-    --chainlink: 125 155 255;
-    --shadow-card: 0 1px 2px rgba(0,0,0,0.35);
-    --shadow-pop: 0 10px 30px rgba(0,0,0,0.45);
-    --shimmer: rgba(255,255,255,.06);
+    --bg: 20 18 15;           /* #14120F ink */
+    --surface: 29 26 22;      /* #1D1A16 */
+    --sunken: 14 12 10;
+    --ink: 236 229 215;       /* #ECE5D7 paper-coloured type */
+    --ink-soft: 205 197 182;
+    --inverse: 20 18 15;
+    --muted: 160 151 136;
+    --faint: 117 109 97;
+    --line: 48 43 36;         /* #302B24 */
+    --brand: 226 90 50;       /* #E25A32 */
+    --brand-dark: 240 132 98; /* vermilion text on ink (aa) */
+    --brand-soft: 56 30 21;
+    --brand-ink: 250 196 172;
+    --gain: 132 182 146;      /* #84B692 */
+    --gain-soft: 28 44 33;
+    --loss: 218 140 156;      /* #DA8C9C */
+    --loss-soft: 52 28 34;
+    --gold: 212 170 84;
+    --gold-soft: 48 38 18;
+    --chainlink: 160 174 192;
+    --shadow-card: none;
+    --shadow-pop: 0 18px 40px -16px rgba(0,0,0,.7);
+    --shimmer: rgba(236,229,215,.05);
   }
   html { background: rgb(var(--bg)); scroll-padding-top: 72px; scroll-padding-bottom: calc(88px + env(safe-area-inset-bottom)); }
   @media (min-width: 1024px) { html { scroll-padding-top: 16px; scroll-padding-bottom: 16px; } }
-  body { @apply bg-bg text-ink font-sans antialiased; overflow-x: hidden; text-rendering: optimizeLegibility; }
+  body { @apply bg-bg text-ink font-sans antialiased; overflow-x: hidden; text-rendering: optimizeLegibility; font-feature-settings: "ss01", "cv11"; }
   * { @apply border-line; }
-  .num { font-variant-numeric: tabular-nums; }
-  :focus-visible { @apply outline-none ring-2 ring-brand/60 ring-offset-2 ring-offset-bg rounded-lg; }
+  h1, h2, h3, .font-display { font-family: var(--font-display), ui-sans-serif, system-ui, sans-serif; }
+  .num { font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
+  ::selection { background: rgb(var(--brand) / .22); }
+  :focus-visible { @apply outline-none ring-2 ring-brand/70 ring-offset-2 ring-offset-bg rounded-md; }
   input, textarea, select { font-size: 16px; } /* prevents ios zoom */
   input[type="checkbox"], input[type="radio"] { accent-color: rgb(var(--ink)); }
   :disabled { cursor: not-allowed; }
@@ -69,20 +78,30 @@
 }
 
 @layer components {
-  .card { @apply bg-surface rounded-2xl border border-line shadow-card; }
-  .btn { @apply inline-flex items-center justify-center gap-2 rounded-full font-semibold transition active:scale-[.98] disabled:opacity-50 disabled:pointer-events-none select-none; min-height: 44px; @apply px-5 text-[15px]; }
+  /* paper block: flat, hairline, print-like corners. no shadows anywhere. */
+  .card { @apply bg-surface rounded-lg border border-line; }
+  .btn { @apply inline-flex items-center justify-center gap-2 rounded-md font-semibold transition active:translate-y-px disabled:opacity-45 disabled:pointer-events-none select-none; min-height: 46px; @apply px-5 text-[15px]; letter-spacing: -0.005em; }
   .btn-sm { min-height: 36px; @apply px-3.5 text-sm; }
-  .btn-primary { @apply btn bg-brand text-white hover:brightness-95; }
+  /* vermilion: the one action that matters on a screen */
+  .btn-primary { @apply btn bg-brand text-white hover:bg-brand-ink dark:hover:brightness-110 dark:text-[rgb(20_18_15)]; }
   .btn-dark { @apply btn bg-ink text-inverse hover:bg-ink-soft; }
-  .btn-ghost { @apply btn bg-transparent text-ink hover:bg-ink/5; }
-  .btn-outline { @apply btn bg-surface text-ink border border-line hover:bg-ink/[.03]; }
-  .chip { @apply inline-flex items-center gap-1 rounded-full border border-line bg-surface px-3 py-1.5 text-sm font-medium text-ink-soft transition hover:bg-ink/[.03]; min-height: 36px; }
-  .chip-active { @apply bg-ink text-inverse border-ink hover:bg-ink; }
-  .input { @apply w-full rounded-xl border border-line bg-surface px-3.5 py-3 text-[16px] text-ink placeholder:text-faint focus:border-ink/40 focus:outline-none focus:ring-4 focus:ring-ink/5; }
+  .btn-ghost { @apply btn bg-transparent text-ink hover:bg-ink/[.06]; }
+  .btn-outline { @apply btn bg-transparent text-ink border border-ink/80 hover:bg-ink hover:text-inverse; }
+  .chip { @apply inline-flex items-center gap-1 rounded-md border border-line bg-transparent px-3 py-1.5 text-sm font-medium text-ink-soft transition hover:border-ink/40; min-height: 36px; }
+  .chip-active { @apply bg-ink text-inverse border-ink hover:border-ink; }
+  .input { @apply w-full rounded-md border border-line bg-surface px-3.5 py-3 text-[16px] text-ink placeholder:text-faint focus:border-ink focus:outline-none; }
   .label { @apply mb-1.5 block text-sm font-medium text-ink-soft; }
-  .ticker { @apply inline-flex items-center rounded-md bg-ink/[.05] px-1.5 py-0.5 text-[12px] font-bold tracking-wide text-ink; }
-  .section-title { @apply text-[13px] font-semibold uppercase tracking-wider text-muted; }
-  .skeleton { @apply relative overflow-hidden rounded-lg bg-ink/[.06]; }
+  /* tickers read like a jersey number: condensed, boxed in ink */
+  .ticker { @apply inline-flex items-center rounded-[3px] border border-ink/70 px-1.5 text-[12px] font-bold uppercase text-ink; font-family: var(--font-display), sans-serif; font-stretch: 78%; letter-spacing: .04em; line-height: 18px; }
+  /* section labels: small caps over a hairline rule, like a newspaper section */
+  .section-title { @apply text-[12px] font-bold uppercase text-ink; font-family: var(--font-display), sans-serif; font-stretch: 80%; letter-spacing: .12em; }
+  .rule-title { @apply flex items-center gap-3; }
+  .rule-title::after { content: ""; @apply h-px flex-1 bg-ink/80; }
+  .display-cond { font-family: var(--font-display), sans-serif; font-stretch: 75%; letter-spacing: -0.01em; }
+  .kicker { @apply text-[11px] font-bold uppercase text-brand-dark; font-family: var(--font-display), sans-serif; font-stretch: 80%; letter-spacing: .14em; }
+  /* the result stamp: inked, slightly crooked, unmistakably beef */
+  .stamp { @apply inline-flex items-center border-[2.5px] px-2.5 py-0.5 font-extrabold uppercase; font-family: var(--font-display), sans-serif; font-stretch: 75%; letter-spacing: .06em; border-radius: 4px; transform: rotate(-4deg); }
+  .skeleton { @apply relative overflow-hidden rounded-md bg-ink/[.07]; }
   .skeleton::after { content: ""; @apply absolute inset-0 -translate-x-full; background: linear-gradient(90deg, transparent, var(--shimmer), transparent); animation: shimmer 1.4s infinite; }
 }
 

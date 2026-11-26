@@ -6,8 +6,8 @@ const RULES: [string, string][] = [
   ["both stocks go up", "the bigger gain wins"],
   ["both stocks go down", "the smaller loss wins"],
   ["identical returns (to 0.0001 pts)", "draw, stakes returned"],
-  ["deadline on a weekend or holiday", "last official close at or before the deadline. if that isn't after the price lock, the next trading session"],
-  ["early-close days", "the 1:00pm et official close is used"],
+  ["deadlines", "next market open and one week always land on a 9:30am et open. a custom deadline must fall in regular hours on a trading day"],
+  ["early-close days", "custom deadlines must be before the 1:00pm et close"],
   ["price source", "chainlink data feeds on base mainnet (coinbase tokenized stocks), read onchain"],
   ["exact price time", "the feed value in effect at the official close (its latest update at or before the close)"],
   ["feed precision", "feeds update on a 0.5% move or at least every 24 hours, so a close can differ from the exchange close by up to about 0.5%"],
@@ -23,15 +23,15 @@ export default function RulesPage() {
 
       <section className="card mt-5 p-5">
         <h2 className="text-lg font-bold">the formula</h2>
-        <p className="mt-2 rounded-xl bg-ink/[.04] p-3 font-mono text-sm">return = ((ending price − starting price) ÷ starting price) × 100</p>
+        <p className="mt-2 rounded-md bg-ink/[.04] p-3 font-mono text-sm">return = ((ending price − starting price) ÷ starting price) × 100</p>
         <p className="mt-3 text-[15px] text-ink-soft">beef always compares <b>percentage returns</b>, never share prices or dollar gains. a $180 stock and a $250 stock compete on equal terms.</p>
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
-          <div className="rounded-xl border p-3 text-sm">
+          <div className="rounded-md border p-3 text-sm">
             <p className="font-semibold">example: both rise</p>
             <p className="mt-1 text-ink-soft">nvda $180 → $189 = <b className="text-gain">+5.00%</b><br />aapl $250 → $257.50 = <b className="text-gain">+3.00%</b></p>
             <p className="mt-1 text-muted">nvda wins by 2.00 percentage points, even though aapl's share price is higher.</p>
           </div>
-          <div className="rounded-xl border p-3 text-sm">
+          <div className="rounded-md border p-3 text-sm">
             <p className="font-semibold">example: both fall</p>
             <p className="mt-1 text-ink-soft">nvda = <b className="text-loss">−5.00%</b><br />aapl = <b className="text-loss">−2.00%</b></p>
             <p className="mt-1 text-muted">aapl wins. it lost less.</p>

@@ -21,7 +21,7 @@ export function StockPicker({ value, onChange, exclude = [], label }: { value?: 
         <Search size={17} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-faint" />
         <input className="input !pl-10" placeholder="search ticker or company" value={q} onChange={(e) => setQ(e.target.value)} aria-label="search stocks" />
       </div>
-      <ul className="max-h-[46dvh] divide-y overflow-y-auto rounded-xl border bg-surface" role="listbox" aria-label="stocks">
+      <ul className="max-h-[46dvh] divide-y overflow-y-auto rounded-md border bg-surface" role="listbox" aria-label="stocks">
         {list.length === 0 && <li className="p-4 text-sm text-muted">no supported stock matches “{q}”.</li>}
         {list.map((a) => {
           const disabled = exclude.includes(a.ticker);
@@ -36,7 +36,7 @@ export function StockPicker({ value, onChange, exclude = [], label }: { value?: 
                 onClick={() => onChange(a.ticker)}
                 className={cx("flex w-full items-center gap-3 px-3.5 py-3 text-left transition disabled:opacity-40", sel ? "bg-ink/[.04]" : "hover:bg-ink/[.02]")}
               >
-                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-ink/[.05] text-[11px] font-extrabold">{a.ticker.slice(0, 4)}</span>
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-ink/[.05] text-[11px] font-extrabold">{a.ticker.slice(0, 4)}</span>
                 <span className="min-w-0 flex-1">
                   <span className="block text-[15px] font-semibold">{a.ticker}</span>
                   <span className="block truncate text-[13px] text-muted">{a.name}{disabled ? " · already picked" : ""}</span>

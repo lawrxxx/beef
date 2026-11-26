@@ -43,66 +43,70 @@ export function ProfileView({ user }: { user: User }) {
 
   return (
     <div>
-      <div className="card p-5">
-        <div className="flex items-start gap-4">
-          <Avatar user={user} size={76} />
-          <div className="min-w-0 flex-1 pt-1">
-            <h1 className="truncate font-display text-2xl font-bold">{user.displayName}{user.verified && <span title="early member" className="ml-1 text-brand">●</span>}</h1>
-            <p className="text-[15px] text-muted">@{user.username}</p>
-            <div className="mt-2 flex gap-4 text-sm">
-              <button onClick={() => setList("followers")} className="hover:underline"><b className="num">{followers.length}</b> <span className="text-muted">followers</span></button>
-              <button onClick={() => setList("following")} className="hover:underline"><b className="num">{following.length}</b> <span className="text-muted">following</span></button>
-            </div>
+      {/* masthead: a person, not an account summary */}
+      <div className="border-b-2 border-ink pb-5">
+        <div className="flex items-end justify-between gap-4">
+          <div className="min-w-0">
+            <p className="text-[12px] font-semibold uppercase tracking-[.12em] text-muted">@{user.username}</p>
+            <h1 className="mt-1 font-display text-[38px] font-bold leading-[.95] tracking-[-0.045em]">{user.displayName}{user.verified && <span title="early member" className="ml-1 align-top text-[18px] text-brand">●</span>}</h1>
           </div>
+          <Avatar user={user} size={72} />
         </div>
-        {user.bio && <p className="mt-3 text-[15px] text-ink-soft">{user.bio}</p>}
-        {user.favoriteStocks.length > 0 && <div className="mt-3 flex flex-wrap gap-1.5">{user.favoriteStocks.map((t) => <TickerTag key={t} t={t} />)}</div>}
+        {user.bio && <p className="mt-3 font-display text-[19px] font-medium leading-snug tracking-[-0.015em] text-ink-soft">“{user.bio}”</p>}
+        <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+          <button onClick={() => setList("followers")} className="hover:underline"><b className="num">{followers.length}</b> <span className="text-muted">followers</span></button>
+          <button onClick={() => setList("following")} className="hover:underline"><b className="num">{following.length}</b> <span className="text-muted">following</span></button>
+          {user.favoriteStocks.length > 0 && (
+            <span className="flex items-center gap-2"><span className="text-muted">rides with</span>{user.favoriteStocks.map((t) => <Link key={t} href={`/stock/${t}`} className="display-cond text-[16px] font-bold hover:text-brand-dark">{t}</Link>)}</span>
+          )}
+        </div>
         <div className="mt-4 flex gap-2">
           {isMe ? (
             <>
               <Link href="/profile/edit" className="btn-outline btn-sm flex-1"><Pencil size={15} /> edit profile</Link>
-              <button className="btn-outline btn-sm !px-3" aria-label="share profile" onClick={() => shareLink(`/u/${user.username}?ref=${user.username}`, `follow me on beef. let's settle some arguments.`)}><Share2 size={15} /></button>
-              <button className="btn-outline btn-sm !px-3" aria-label="settings" onClick={() => setSettings(true)}><Settings size={15} /></button>
+              <button className="btn-ghost btn-sm !px-3" aria-label="share profile" onClick={() => shareLink(`/u/${user.username}?ref=${user.username}`, `follow me on beef. let's settle some arguments.`)}><Share2 size={16} /></button>
+              <button className="btn-ghost btn-sm !px-3" aria-label="settings" onClick={() => setSettings(true)}><Settings size={16} /></button>
             </>
           ) : (
             <>
               <div className="flex-1 [&>button]:w-full"><FollowButton userId={user.id} small /></div>
               <Link href={`/duel/new?vs=${user.id}`} className="btn-primary btn-sm flex-1"><Swords size={15} /> challenge</Link>
-              <button className="btn-outline btn-sm !px-3" aria-label="share profile" onClick={() => shareLink(`/u/${user.username}`, `${user.displayName} on beef`)}><Share2 size={15} /></button>
+              <button className="btn-ghost btn-sm !px-3" aria-label="share profile" onClick={() => shareLink(`/u/${user.username}`, `${user.displayName} on beef`)}><Share2 size={16} /></button>
             </>
           )}
         </div>
       </div>
 
-      <div className="mt-3 grid grid-cols-4 gap-2">
+      {/* the record, printed like a box score */}
+      <div className="grid grid-cols-4 border-b border-line">
         {[
           ["beef score", String(st.score), "reputation"],
-          ["win rate", st.completed ? `${st.winRate.toFixed(0)}%` : "—", `${st.wins}–${st.losses}${st.draws ? `–${st.draws}` : ""}`],
-          ["completed", String(st.completed), `${st.active} in progress`],
-          ["best streak", String(st.bestStreak), st.streak > 0 ? `${st.streak} now 🔥` : "no streak now"],
-        ].map(([k, v, sub]) => (
-          <div key={k} className="card px-1.5 py-3 text-center">
-            <p className="num font-display text-lg font-bold leading-tight">{v}</p>
-            <p className="text-[11px] font-medium text-ink-soft">{k}</p>
-            <p className="num truncate text-[10px] text-muted">{sub}</p>
+          ["record", `${st.wins}–${st.losses}${st.draws ? `–${st.draws}` : ""}`, st.completed ? `${st.winRate.toFixed(0)}% wins` : "no results"],
+          ["played", String(st.completed), `${st.active} live`],
+          ["streak", String(st.bestStreak), st.streak > 0 ? `${st.streak} now` : "best"],
+        ].map(([k, v, sub], i) => (
+          <div key={k} className={cx("min-w-0 py-3.5", i > 0 && "border-l border-line pl-3")}>
+            <p className="truncate text-[10.5px] font-semibold uppercase tracking-[.12em] text-muted">{k}</p>
+            <p className="num display-cond mt-1 truncate text-[30px] font-bold leading-none">{v}</p>
+            <p className="num mt-1 truncate text-[11px] text-muted">{sub}</p>
           </div>
         ))}
       </div>
 
-      <Tabs<Tab> value={tab} onChange={setTab} className="mb-4 mt-5" options={[{ value: "activity", label: "activity" }, { value: "duels", label: "duels" }, { value: "rivalries", label: "rivalries" }, { value: "badges", label: `badges ${badges.filter((b) => b.unlocked).length}/${badges.length}` }]} />
+      <Tabs<Tab> value={tab} onChange={setTab} className="mb-4 mt-6" options={[{ value: "activity", label: "activity" }, { value: "duels", label: "duels" }, { value: "rivalries", label: "rivalries" }, { value: "badges", label: `badges ${badges.filter((b) => b.unlocked).length}/${badges.length}` }]} />
 
-      {tab === "activity" && (posts.length ? <div className="space-y-3">{posts.map((p) => <PostCard key={p.id} post={p} />)}</div> : <p className="py-8 text-center text-sm text-muted">no posts yet.</p>)}
+      {tab === "activity" && (posts.length ? <div className="-mt-2">{posts.map((p) => <PostCard key={p.id} post={p} />)}</div> : <p className="py-8 text-center text-sm text-muted">no posts yet.</p>)}
       {tab === "duels" && (duels.length ? <div className="grid gap-3 sm:grid-cols-2">{duels.map((d) => <DuelCard key={d.id} d={d} compact />)}</div> : <p className="py-8 text-center text-sm text-muted">no duels yet.</p>)}
       {tab === "rivalries" && (
         rivals.length ? (
-          <div className="card divide-y">
+          <div className="divide-y border-y border-line">
             {rivals.map((r) => {
               const o = s.users.find((u) => u.id === r.opponentId)!;
               return (
-                <Link key={r.opponentId} href={`/rivalry/${o.username}${isMe ? "" : `?a=${user.username}`}`} className="flex items-center gap-3 px-4 py-3 hover:bg-ink/[.02]">
+                <Link key={r.opponentId} href={`/rivalry/${o.username}${isMe ? "" : `?a=${user.username}`}`} className="flex items-center gap-3 py-3 hover:bg-ink/[.03]">
                   <Avatar user={o} size={40} />
                   <div className="min-w-0 flex-1"><p className="font-semibold">vs {o.displayName}</p><p className="text-[13px] text-muted">{r.duels.length} duels{r.streak.count > 1 ? ` · ${r.streak.who === "me" ? user.displayName.split(" ")[0] : o.displayName.split(" ")[0]} won ${r.streak.count} straight` : ""}</p></div>
-                  <p className="num font-display text-lg font-bold">{r.wins}–{r.losses}{r.draws ? `–${r.draws}` : ""}</p>
+                  <p className="num display-cond text-[28px] font-bold leading-none">{r.wins}<span className="mx-0.5 text-faint">–</span>{r.losses}{r.draws ? `–${r.draws}` : ""}</p>
                 </Link>
               );
             })}
@@ -112,7 +116,7 @@ export function ProfileView({ user }: { user: User }) {
       {tab === "badges" && (
         <div className="grid grid-cols-3 gap-2 sm:grid-cols-3">
           {badges.map((b) => (
-            <div key={b.id} className={cx("card p-3 text-center", !b.unlocked && "opacity-45 grayscale")} title={b.description}>
+            <div key={b.id} className={cx("rounded-md border border-dashed border-ink/25 p-3 text-center", b.unlocked ? "border-solid border-ink/70" : "opacity-45 grayscale")} title={b.description}>
               <p className="text-3xl">{b.emoji}</p>
               <p className="mt-1 text-sm font-semibold">{b.name}</p>
               <p className="text-[11px] leading-tight text-muted">{b.description}</p>
@@ -134,15 +138,15 @@ export function ProfileView({ user }: { user: User }) {
             <ThemeSelector />
             <p className="mt-1 text-xs text-muted">system follows your device. your choice is saved to your account.</p>
           </div>
-          <button className="btn-outline w-full justify-start" onClick={() => shareLink(`/?ref=${user.username}`, "i'm on beef: friendly stock duels with friends. join me and let's settle an argument.")}><Share2 size={17} /> invite friends</button>
+          <button className="btn-ghost w-full justify-start border-b border-line !rounded-none" onClick={() => shareLink(`/?ref=${user.username}`, "i'm on beef: friendly stock duels with friends. join me and let's settle an argument.")}><Share2 size={17} /> invite friends</button>
           {!install.installed && (
-            <button className="btn-outline w-full justify-start" onClick={async () => { if (install.canPrompt) await install.prompt(); else setIosGuide(true); }}>
+            <button className="btn-ghost w-full justify-start border-b border-line !rounded-none" onClick={async () => { if (install.canPrompt) await install.prompt(); else setIosGuide(true); }}>
               <Download size={17} /> install beef on this device
             </button>
           )}
-          <Link href="/wallet" className="btn-outline w-full justify-start">wallet & test usdc</Link>
-          <Link href="/rules" className="btn-outline w-full justify-start">how beef works & risk disclosure</Link>
-          <button className="btn-outline w-full justify-start text-loss" onClick={() => run(async () => { await signOut(); setSettings(false); router.push("/"); }, "signed out")}><LogOut size={17} /> sign out</button>
+          <Link href="/wallet" className="btn-ghost w-full justify-start border-b border-line !rounded-none">wallet & test usdc</Link>
+          <Link href="/rules" className="btn-ghost w-full justify-start border-b border-line !rounded-none">how beef works & risk disclosure</Link>
+          <button className="btn-ghost w-full justify-start border-b border-line !rounded-none text-loss" onClick={() => run(async () => { await signOut(); setSettings(false); router.push("/"); }, "signed out")}><LogOut size={17} /> sign out</button>
           <div className="pt-2"><SimBadge label="base sepolia testnet · test usdc" /></div>
         </div>
       </Sheet>

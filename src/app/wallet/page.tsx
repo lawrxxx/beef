@@ -26,13 +26,13 @@ export default function WalletPage() {
   return (
     <div>
       <PageHeader title="wallet" subtitle={`test usdc on ${NETWORK_NAME}`} />
-      <div className="mb-4 flex items-start gap-2 rounded-xl border border-gold/30 bg-gold-soft/60 p-3 text-[13px] text-ink-soft">
+      <div className="mb-5 flex items-start gap-2 border-l-[3px] border-gold py-1 pl-3 text-[13px] text-ink-soft">
         <Info size={16} className="mt-0.5 shrink-0 text-gold" />
         <p>beef runs on <b>{NETWORK_NAME}</b>, a test network. test usdc has <b>no monetary value</b>, and no real money moves on beef.</p>
       </div>
       <WalletPanel />
       <Section title="how it works" className="mt-6">
-        <div className="card divide-y text-sm">
+        <div className="divide-y border-y border-line text-sm">
           {[
             ["network", `${NETWORK_NAME} (chain ${CHAIN_ID}) only`],
             ["token", "usdc by circle (test)"],
@@ -41,7 +41,7 @@ export default function WalletPage() {
             ["gas", cfg ? (cfg.sponsorship ? "covered by beef (sponsored)" : "sponsorship not configured yet") : "…"],
             ["beef fee", "none"],
           ].map(([k, v]) => (
-            <div key={k} className="flex justify-between gap-3 px-4 py-2.5">
+            <div key={k} className="flex justify-between gap-3 py-2.5">
               <span className="text-muted">{k}</span>
               {/^0x[0-9a-fA-F]{40}$/.test(v) ? <a className="font-mono text-[12px] underline" href={addressUrl(v)} target="_blank" rel="noreferrer">{shortAddress(v)}</a> : <span className="text-right text-[13px]">{v}</span>}
             </div>

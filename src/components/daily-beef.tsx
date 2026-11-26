@@ -34,12 +34,12 @@ export function DailyBeefCard({ compact }: { compact?: boolean }) {
   const aShare = total ? Math.round((aCount / total) * 100) : 50;
 
   return (
-    <div className="card overflow-hidden">
-      <div className="flex items-center justify-between border-b bg-brand-soft/60 px-4 py-2.5">
-        <p className="flex items-center gap-1.5 text-sm font-bold text-brand-ink"><Flame size={16} /> beef of the day</p>
-        <p className="text-xs font-medium text-brand-ink/80">{mounted ? sessionLabel(d.session) : ""}</p>
+    <div className="border-y-2 border-ink">
+      <div className="flex items-center justify-between border-b border-line py-2.5">
+        <p className="kicker flex items-center gap-1.5"><Flame size={13} /> beef of the day</p>
+        <p className="num text-xs font-medium text-muted">{mounted ? sessionLabel(d.session) : ""}</p>
       </div>
-      <div className="p-4">
+      <div className="py-4">
         <p className="mb-3 text-[15px] text-ink-soft">which does better{compact ? "" : " from yesterday's close to the next close"}?</p>
         <div className="grid grid-cols-2 gap-2">
           {[d.a, d.b].map((t) => (
@@ -47,9 +47,9 @@ export function DailyBeefCard({ compact }: { compact?: boolean }) {
               key={t}
               disabled={!!mine}
               onClick={() => run(() => pickDaily(d.session, t), `you picked ${t}`)}
-              className={cx("rounded-xl border-2 p-3 text-center transition", mine === t ? "border-ink bg-ink text-inverse" : mine ? "border-line opacity-60" : "border-line hover:border-ink/30")}
+              className={cx("rounded-md border-2 p-3 text-center transition", mine === t ? "border-ink bg-ink text-inverse" : mine ? "border-line opacity-60" : "border-line hover:border-ink/40")}
             >
-              <span className="block font-display text-xl font-extrabold">{t}</span>
+              <span className="display-cond block text-[34px] font-bold leading-none">{t}</span>
               {mine && <span className="num text-xs">{t === d.a ? aShare : 100 - aShare}% picked</span>}
             </button>
           ))}
@@ -77,7 +77,7 @@ export function DailyHistory() {
         const total = Object.keys(d.picks).length;
         const right = Object.values(d.picks).filter((p) => p === winner).length;
         return (
-          <li key={d.session} className="card flex items-center gap-3 p-3">
+          <li key={d.session} className="flex items-center gap-3 border-b border-line py-3">
             <div className="w-20 shrink-0 text-xs text-muted">{sessionLabel(d.session)}</div>
             <div className="flex flex-1 items-center gap-3 text-sm">
               <span className={cx("font-bold", winner === d.a ? "text-ink" : "text-faint")}>{d.a} <Pct v={r[d.a]} className="text-xs" /></span>

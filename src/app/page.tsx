@@ -33,19 +33,17 @@ function StartBeefCard({ signedIn }: { signedIn: boolean }) {
     return out.filter((p, i, a) => a.findIndex((q) => q.join() === p.join()) === i).slice(0, 3);
   }, [s]);
   return (
-    <div className="card p-4">
-      <div className="flex items-center gap-3">
-        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-brand text-white"><Swords size={22} /></span>
-        <div className="min-w-0 flex-1">
-          <p className="font-semibold">think your stock beats theirs?</p>
-          <p className="text-[13px] text-muted">pick two stocks, set a stake, settle it at the close.</p>
-        </div>
-      </div>
-      <Link href={signedIn ? "/duel/new" : "/auth/sign-in"} className="btn-primary mt-3 w-full">start a beef</Link>
-      <div className="mt-3 flex flex-wrap items-center gap-1.5">
-        <span className="text-xs text-muted">quick picks:</span>
+    <div className="border-y border-ink/80 py-5">
+      <p className="kicker">start a beef</p>
+      <p className="mt-1.5 font-display text-[28px] font-bold leading-[1.02] tracking-[-0.035em]">think your stock<br />beats theirs?</p>
+      <p className="mt-2 text-[14px] text-muted">pick two stocks, set a stake, let the market decide.</p>
+      <Link href={signedIn ? "/duel/new" : "/auth/sign-in"} className="btn-primary mt-4 w-full"><Swords size={18} /> start a beef</Link>
+      <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2">
+        <span className="text-[11px] font-semibold uppercase tracking-[.1em] text-muted">quick picks</span>
         {ideas.map(([a, b]) => (
-          <Link key={a + b} href={signedIn ? `/duel/new?mine=${a}&theirs=${b}` : "/auth/sign-in"} className="chip !min-h-0 !py-1 text-[13px]">{a} vs {b}</Link>
+          <Link key={a + b} href={signedIn ? `/duel/new?mine=${a}&theirs=${b}` : "/auth/sign-in"} className="display-cond text-[17px] font-bold hover:text-brand-dark">
+            {a}<span className="mx-1 font-normal text-brand">/</span>{b}
+          </Link>
         ))}
       </div>
     </div>
@@ -83,13 +81,14 @@ export default function HomePage() {
 
   return (
     <div>
-      <div className="mb-4">
-        <h1 className="font-display text-2xl font-bold tracking-tight">{me ? `hey, ${me.displayName.split(" ")[0]}` : "welcome to beef"}</h1>
-        <p className="text-[15px] text-muted">{me ? "here's what your friends are arguing about." : "stock duels with friends. browse freely, sign in to play."}</p>
+      <div className="mb-5">
+        <p className="text-[12px] font-semibold uppercase tracking-[.12em] text-muted" suppressHydrationWarning>{new Date().toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" }).toLowerCase()}</p>
+        <h1 className="mt-1 font-display text-[32px] font-bold leading-none tracking-[-0.04em]">{me ? `hey, ${me.displayName.split(" ")[0]}.` : "welcome to beef"}</h1>
+        <p className="mt-1.5 text-[15px] text-muted">{me ? "here's what your friends are arguing about." : "stock duels with friends. browse freely, sign in to play."}</p>
       </div>
 
       {/* 1. the primary action */}
-      <div className="mb-4"><StartBeefCard signedIn={!!me} /></div>
+      <div className="mb-7"><StartBeefCard signedIn={!!me} /></div>
 
       {/* things that need an answer come first */}
       {invites.length > 0 && (
@@ -98,7 +97,8 @@ export default function HomePage() {
             {invites.map((d) => {
               const by = userById(s, d.createdBy);
               return (
-                <Link key={d.id} href={`/duel/${d.id}`} className="card flex items-center gap-3 border-brand/30 bg-brand-soft/40 p-3">
+                <Link key={d.id} href={`/duel/${d.id}`} className="relative flex items-center gap-3 border-y border-line bg-brand-soft/50 py-3 pl-4 pr-3">
+                  <span className="absolute inset-y-0 left-0 w-[3px] bg-brand" aria-hidden />
                   <Avatar user={by} size={40} />
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-[15px]"><b>{by?.displayName}</b> challenged you</p>
@@ -118,49 +118,49 @@ export default function HomePage() {
 
       {tab !== "following" && liveBeefs.length > 0 && (
         <Section title={myLive.length ? "your live beefs" : "live now"} action={<Link href="/duel" className="text-sm font-semibold text-brand-dark">all duels</Link>}>
-          <div className="no-scrollbar -mx-4 flex snap-x gap-3 overflow-x-auto px-4 pb-1">
-            {liveBeefs.map((d) => <div key={d.id} className="w-[290px] shrink-0 snap-start"><DuelCard d={d} compact /></div>)}
+          <div className="space-y-3">
+            {liveBeefs.slice(0, 3).map((d) => <DuelCard key={d.id} d={d} compact />)}
           </div>
         </Section>
       )}
 
-      {tab === "foryou" && <div className="mb-4"><Composer /></div>}
+      {tab === "foryou" && <div className="mb-1"><Composer /></div>}
 
       {posts.length === 0 ? (
         <EmptyState icon={<Users size={22} />} title="your feed is looking quiet."
           body="find friends or invite someone to start your first beef."
           action={<div className="flex gap-2"><Link href="/discover" className="btn-dark btn-sm">find friends</Link><button className="btn-outline btn-sm" onClick={invite}>invite someone</button></div>} />
       ) : (
-        <div className="space-y-3">
+        <div>
           {posts.slice(0, limit).map((p, i) => (
-            <div key={p.id} className="space-y-3">
+            <div key={p.id}>
               <PostCard post={p} />
               {/* 4. trending + 5. suggested people, inline on mobile (the desktop rail shows them) */}
               {tab === "foryou" && i === 1 && (
-                <div className="xl:hidden">
-                  <div className="mb-2 flex items-center justify-between"><h2 className="section-title">trending stocks</h2><SourceBadge /></div>
+                <div className="py-5 xl:hidden">
+                  <div className="mb-2 flex items-center justify-between gap-3"><h2 className="section-title">trending stocks</h2><SourceBadge /></div>
                   <TrendingStrip />
                 </div>
               )}
               {tab === "foryou" && i === 2 && following.size < 3 && (
-                <div className="card flex items-center gap-3 p-4">
+                <div className="flex items-center gap-3 border-b border-line py-4">
                   <div className="min-w-0 flex-1"><p className="font-semibold">beef is better with friends</p><p className="text-[13px] text-muted">send your invite link. it brings them straight to beef.</p></div>
                   <button className="btn-dark btn-sm shrink-0" onClick={invite}>invite</button>
                 </div>
               )}
               {tab === "foryou" && i === 4 && suggestions.length > 0 && (
-                <div className="card px-4 py-1 xl:hidden">
-                  <p className="section-title pt-3">people to follow</p>
+                <div className="border-b border-line py-4 xl:hidden">
+                  <p className="section-title rule-title">people to follow</p>
                   {suggestions.map((u) => <UserRow key={u.id} userId={u.id} sub={`@${u.username} · into ${u.favoriteStocks.slice(0, 2).join(", ")}`} />)}
                 </div>
               )}
-              {tab === "foryou" && i === 7 && <div className="xl:hidden"><DailyBeefCard /></div>}
+              {tab === "foryou" && i === 7 && <div className="py-4 xl:hidden"><DailyBeefCard /></div>}
             </div>
           ))}
           {posts.length > limit ? (
-            <button className="btn-outline w-full" onClick={() => setLimit((l) => l + 10)}>show more</button>
+            <button className="btn-outline mt-4 w-full" onClick={() => setLimit((l) => l + 10)}>show more</button>
           ) : (
-            <p className="py-6 text-center text-sm text-faint">you're all caught up 🥩</p>
+            <p className="py-8 text-center font-display text-[15px] italic text-faint">that's everything. go start something.</p>
           )}
         </div>
       )}
