@@ -198,9 +198,9 @@ function NewDuelInner() {
         <div className="slab -mx-4 mb-5 px-4 py-3 lg:mx-0">
           <p className="meta muted-s">tale of the tape{step > 3 && ` · ${stakeLabel} each`}</p>
           <div className="mt-1.5 grid grid-cols-[1fr_auto_1fr] items-end gap-2">
-            <div className="min-w-0"><p className="meta muted-s truncate">you</p><p className={cx("cond truncate text-[34px] leading-[.85]", !mine && "opacity-40")}>{mine ?? (picked[0] ?? "?")}</p></div>
+            <div className="min-w-0"><p className="meta muted-s truncate">you</p><p className={cx("cond truncate pr-2 text-[34px] leading-[.85]", !mine && "opacity-40")}>{mine ?? (picked[0] ?? "?")}</p></div>
             <span className="serif pb-1 text-slab-muted">vs</span>
-            <div className="min-w-0 text-right"><p className="meta muted-s truncate">{mode === "open" ? "anyone" : opponents.map((id) => userById(id)?.displayName.split(" ")[0]).join(", ")}</p><p className={cx("cond truncate text-[34px] leading-[.85]", !theirStocks[0] && !picked[1] && "opacity-40")}>{mine ? (theirStocks.join(" · ") || "?") : (picked[1] ?? "?")}</p></div>
+            <div className="min-w-0 text-right"><p className="meta muted-s truncate">{mode === "open" ? "anyone" : opponents.map((id) => userById(id)?.displayName.split(" ")[0]).join(", ")}</p><p className={cx("cond truncate pr-2 text-[34px] leading-[.85]", !theirStocks[0] && !picked[1] && "opacity-40")}>{mine ? (theirStocks.join(" · ") || "?") : (picked[1] ?? "?")}</p></div>
           </div>
         </div>
       )}
@@ -408,7 +408,7 @@ function NewDuelInner() {
           </div>
           <label className="card flex cursor-pointer items-start gap-3 p-4">
             <input type="checkbox" className="mt-1 h-5 w-5 accent-ink" checked={agree} onChange={(e) => setAgree(e.target.checked)} />
-            <span className="text-sm text-ink-soft">i agree to these terms. once everyone's in they can't be changed. stakes are <b>test usdc on base sepolia</b>, stock prices come from chainlink data streams, and this is entertainment, not investment advice.</span>
+            <span className="text-sm text-ink-soft">i agree to these terms. once everyone's in they can't be changed. stakes are <b>test usdc on base sepolia</b>, stock prices come from chainlink data feeds, and this is entertainment, not investment advice.</span>
           </label>
         </div>
       )}
